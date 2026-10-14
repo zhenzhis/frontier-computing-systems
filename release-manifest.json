@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "baseWorkflow": "WF7",
+  "intentRouting": "deferred",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "e40e14d4a44c01c7b1a2097add3c6bfe411e15df81b4bd618803f8306d30f273"
+    },
+    {
+      "path": ".github/workflows/verify.yml",
+      "sha256": "52fd87007a192a7a14f791be26d103d543d199d4154078f31147675f56271b73"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "d7e23d19e19964387b89106728253629aaa8eefb885020af7fbc76f96ccab9c0"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "6c09241b35fdf42ba1590fc5fed6365c6962483f6bc94b896ea3d346879e1ac3"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "9c0b830f64e8ff35405d155df6cc2fe292dd0302ad6b9148de26c30f56e59f03"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "881afd0048c1a37d9681935105f426ddfe4a70519861992af88a0103e20cfc59"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "3537b9aab0e21cc31dcaaf3e75b4e32736f4886a775a18f96da3b35f80540bf3"
+    },
+    {
+      "path": "docs/decisions/0001-public-project.md",
+      "sha256": "de53eef24124e1e9d16495a6bc707535f0bc414a5e38564dc802d0962514a51d"
+    },
+    {
+      "path": "docs/installation.md",
+      "sha256": "14c479028f028eb6b5468360a7466bf628b4ddf5194e39e583c8929b5cdd30cb"
+    },
+    {
+      "path": "docs/maintenance.md",
+      "sha256": "d47812af79f1ea7ec19325e57ea1cd3bff7f889f1910b7b6f980dcf0da336786"
+    },
+    {
+      "path": "docs/research/intent-routing.md",
+      "sha256": "c67016caf7ee918164d945c8fc05f67f5403798ec030867ffd4ab5fdda990c85"
+    },
+    {
+      "path": "docs/research/model-roles.md",
+      "sha256": "6a659b6b141cc37e0bb5c8ad9dfad6a10b4ae26384f03a0e7651855cd19b39ec"
+    },
+    {
+      "path": "docs/research/README.md",
+      "sha256": "f4bd38d03d1a448bd8285917cb3e0d691ba77035f3e34d0eeb81d174a2c53068"
+    },
+    {
+      "path": "docs/tasks/bootstrap.md",
+      "sha256": "333473bc40c787acb8aaaed0c8d0c18004bef4e487581e142085db978dcc8880"
+    },
+    {
+      "path": "examples/permission-config.json",
+      "sha256": "997369470aaebbeebf52f337c08f06af3d221fa7a504f5fa8295de56ca2d64eb"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "f348cf3879fc090d1cc4662e6b4e3d22148dc1a783716f77d22f32a433387615"
+    },
+    {
+      "path": "licenses/pi-muelsyse-macaron-MIT.txt",
+      "sha256": "ef7d31751a277b407beab97d9fac2d829c3d719250a31a2b1b72a00a433f472a"
+    },
+    {
+      "path": "managed/extensions/windows-policy/index.ts",
+      "sha256": "472a361cd2621e231abf1731a95c1b94a35ea5e71f1de96aea567fdda4b33e57"
+    },
+    {
+      "path": "managed/extensions/windows-policy/normalize-command.ps1",
+      "sha256": "c1d0710f0575be0429536181fbb7c3d4928934abdb195d5cb36fd2b7864fe9a5"
+    },
+    {
+      "path": "managed/extensions/workflow-baseline/index.ts",
+      "sha256": "bea9befcdf858bfb6b7ed9c6d52ff0956180934a0402df5ae810ea03a22ea8ef"
+    },
+    {
+      "path": "managed/extensions/workflow-runtime/index.ts",
+      "sha256": "c8c05a50f7ca31eba14ec3d0244856022acfedb8197445ead4485a9cf4583674"
+    },
+    {
+      "path": "managed/prompts/workflow-dev.md",
+      "sha256": "a3a45942d254fa754b8b36d2f9fc995db0f199630f7f749c70c485b0e006513e"
+    },
+    {
+      "path": "managed/prompts/workflow-experiment.md",
+      "sha256": "a48876cd91188702dc7a8b66e8caeaf1ab09d2b4b1890032c4d10bca91411cc2"
+    },
+    {
+      "path": "managed/prompts/workflow-long.md",
+      "sha256": "88efab9e9e3ea8656b8d62efc59223772fd20852b18bf9e6fd01230b2f138e09"
+    },
+    {
+      "path": "managed/prompts/workflow-research.md",
+      "sha256": "f06cfd51e7bf17d83ffe299653196109dc1c250da038593c40f72b181d9fb626"
+    },
+    {
+      "path": "managed/prompts/workflow-resume.md",
+      "sha256": "de5256b3e7c2354712d2872717ccd5c7bfc37cdfeebde106b698949ab7f9e173"
+    },
+    {
+      "path": "managed/prompts/workflow-retro.md",
+      "sha256": "7e215ad219cd324c1f667530f9a2fc0e688652a4bba1bd27135f755811c27670"
+    },
+    {
+      "path": "managed/skills/workflow-orchestration/references/model-roles.md",
+      "sha256": "bd84d257a6043fb35f4ef359ca8541d8bfbfa6de3ffcca5136f370b076f3e43d"
+    },
+    {
+      "path": "managed/skills/workflow-orchestration/SKILL.md",
+      "sha256": "73e66e5257390333e4d949475e89153c5c65817a54145172554dd17257610c9d"
+    },
+    {
+      "path": "managed/themes/zhenzhi-calm.json",
+      "sha256": "3715dc07728d5f1899b88bd9de118cf1ab209a2da0410c154dfa4f786fed28ee"
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "c1c50c5d614bf088ae548bf7d2daefb57b827e9110eb71e3c67c81998b51f5f4"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "f69d8fa7a40229663d9290bb8399a384fbfe837b778025e7e3c8452cde3be8a7"
+    },
+    {
+      "path": "package.json",
+      "sha256": "cdacea0cec1954f4490b1433eac8eab166abbf313dd8f22fbe4d77079ba4d7c1"
+    },
+    {
+      "path": "README.en.md",
+      "sha256": "df33ce4c49b64543e0f2a181102d0d17a41365d87b5f48bdb0ecbdfda0ff040c"
+    },
+    {
+      "path": "README.md",
+      "sha256": "2c6a4502d9178afc7ecd147643bcfe34a0306e22c76a62c948efff8737648707"
+    },
+    {
+      "path": "ROADMAP.md",
+      "sha256": "c5cfa512be4caf63cd9d57acead4a7f12554b7b5c0a448b5b73d5bdb9a8d9c5b"
+    },
+    {
+      "path": "runtime/cli.mjs",
+      "sha256": "600138998da019764a6b991ce9d3c6b742895cb36256a629fa0e1f8d7a4503f5"
+    },
+    {
+      "path": "runtime/control.mjs",
+      "sha256": "85be490bd149b78896435cb4449ef420e2f38fe1f789a6251658f0d45c190659"
+    },
+    {
+      "path": "runtime/control.test.mjs",
+      "sha256": "2510a0c7c19384b6d28ec100ea31b51dd067b52ee8521e51ae8affebb4bef7b3"
+    },
+    {
+      "path": "runtime/evaluate.mjs",
+      "sha256": "cf07bbf9a1012ba222bb78dcde0974e3f034d1bd8d2306b61e604624e627b79b"
+    },
+    {
+      "path": "runtime/feedback-core.mjs",
+      "sha256": "13446518f82b17a1d5b02d89268f1b6f50fd3ab7a7d63c0b4078f7c7a8b6a189"
+    },
+    {
+      "path": "runtime/feedback.mjs",
+      "sha256": "f76d9c09c1f48dba32d3006e3d90cb5782f00ade81f92c91998c451944668c8b"
+    },
+    {
+      "path": "runtime/feedback.test.mjs",
+      "sha256": "879f6acfe72aadbb477a55fb77abcaf7242eb6acc80edb74aaf8f133ad35966d"
+    },
+    {
+      "path": "runtime/README.md",
+      "sha256": "6c2f9bfab21d6aee7708a355c324cd579eab20a6b556d0e6ad496835d38c9aa0"
+    },
+    {
+      "path": "runtime/worker-policy.mjs",
+      "sha256": "02ba8e0536572ed4e0d04368f413c2752412c3a4b3333a60b0795fd201b0bcdf"
+    },
+    {
+      "path": "runtime/worker.mjs",
+      "sha256": "f525c0c973a6932a0bbcdc2551e0ed500aba12210b806741c32f7f999cbe4768"
+    },
+    {
+      "path": "scripts/audit-public.mjs",
+      "sha256": "a7b9c83fbbc352cf957e939a2d29248db6e6e993c72bafe0a5bec70ded2ee3b5"
+    },
+    {
+      "path": "scripts/backup.mjs",
+      "sha256": "a608b1a0d9e5a69ec421f4cafb03ae555731f3646158afc5bfc3492be7b193d8"
+    },
+    {
+      "path": "scripts/release.mjs",
+      "sha256": "b5d0b4af345c7abca77028cdf37aaaeb48f50501bcb6bebcd9247088b9d4c3ea"
+    },
+    {
+      "path": "scripts/verify-links.mjs",
+      "sha256": "df23315282961145a6fcf65699ffa490b9cad1f040b0206ef38fb3b12fe67a5a"
+    },
+    {
+      "path": "scripts/verify-manifest.mjs",
+      "sha256": "618c104d043859154fe3e30aaa6babb458303e6c3f8fec115d635eca55eb42d1"
+    },
+    {
+      "path": "scripts/verify-sdk.mjs",
+      "sha256": "14151639542604ef10fdb68030d2dc623a68cf62cda6fb84cdf5c4b0f943324e"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "e8a90d58b5c4a50e590001d66081b28e9d25aded8664578fb75ce63d64ffd9ff"
+    },
+    {
+      "path": "templates/任务记录.md",
+      "sha256": "8c6af2c17b59f186b7775fe8a06bb9ea08d8d23f91a1fc2704cb0c97484578d7"
+    },
+    {
+      "path": "templates/任务与记忆模板.md",
+      "sha256": "21cfc50383a4b55d85e208a6b2d96c006d43ead480b16917769473fd7c002ae2"
+    },
+    {
+      "path": "tests/backup.test.mjs",
+      "sha256": "d46fa7a276da79062a1d8b31430ca9545a1b46c2de5b18e7ba98e3e11852f003"
+    },
+    {
+      "path": "tests/publication.test.mjs",
+      "sha256": "bdc767485619d27020881d65e68e2e33294d7eb9667094d2786984224d60e012"
+    },
+    {
+      "path": "tests/windows-parser.test.mjs",
+      "sha256": "2f3eea7c05f43d50cf406e536c2532d205a9ef3c820b23d59f88140721fa3283"
+    }
+  ]
+}

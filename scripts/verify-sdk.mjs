@@ -1,0 +1,34 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const userState=path.join(os.homedir(),'.pi','zhenzhi-workflow-state','projects'),stateExisted=fs.existsSync(userState);
+const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'zhenzhi-sdk-')),agent=path.join(scratch,'agent'),project=path.join(scratch,'project');
+fs.mkdirSync(agent);fs.mkdirSync(project);
+process.env.PI_CODING_AGENT_DIR=agent;
+const sdk=await import('@earendil-works/pi-coding-agent');
+const settings=sdk.SettingsManager.inMemory({packages:[root],compaction:{enabled:true,reserveTokens:65536,keepRecentTokens:48000}});
+const runtime=await sdk.ModelRuntime.create({authPath:path.join(agent,'auth.json'),modelsPath:null,modelsStorePath:path.join(agent,'models-store.json'),allowModelNetwork:false,refreshOnCreate:false});
+const loader=new sdk.DefaultResourceLoader({cwd:project,agentDir:agent,settingsManager:settings,noContextFiles:true,additionalExtensionPaths:process.platform==='win32'?[path.join(root,'managed/extensions/windows-policy/index.ts')]:[]});
+await loader.reload();
+const {session,extensionsResult}=await sdk.createAgentSession({cwd:project,resourceLoader:loader,modelRuntime:runtime,settingsManager:settings,sessionManager:sdk.SessionManager.inMemory(project)});
+try{
+ assert.equal(extensionsResult.errors.length,0,JSON.stringify(extensionsResult.errors));
+ const notices=[],statuses=new Map();
+ await session.bindExtensions({mode:'rpc',uiContext:{notify:(m,t)=>notices.push({m,t}),setStatus:(k,v)=>v===undefined?statuses.delete(k):statuses.set(k,v),hasUI:false},onError:e=>{throw Error(JSON.stringify(e));}});
+ const commands=['workflow-status','workflow-task','workflow-memory','workflow-inbox','workflow-evals'];
+ for(const command of commands)assert(session.extensionRunner.getCommand(command),`Missing native command ${command}`);
+ assert(loader.getSkills().skills.some(x=>x.name==='workflow-orchestration'));
+ assert.equal(loader.getPrompts().prompts.length,6);
+ const ctx=session.extensionRunner.createCommandContext();
+ await session.extensionRunner.getCommand('workflow-task').handler('status',ctx);
+ await session.extensionRunner.getCommand('workflow-status').handler('--json',ctx);
+ assert(!notices.some(x=>x.t==='error'),JSON.stringify(notices));
+ const records=notices.filter(x=>x.t==='info').map(x=>JSON.parse(x.m));
+ assert(records.some(x=>x.automaticExecution===false));
+ assert(records.some(x=>x.integrity?.passed===true&&x.intentRouting==='deferred'));
+ assert.equal(fs.existsSync(userState),stateExisted,'SDK smoke test must not create default user state');
+ console.log(JSON.stringify({passed:true,commands,invokedReadOnlyCommands:2,skills:1,prompts:6,modelRequests:0,isolatedAgent:true,paidExecution:false,windowsAdapterLoaded:process.platform==='win32'},null,2));
+}finally{await session.extensionRunner.emit({type:'session_shutdown',reason:'quit'});await session.dispose();}

@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {ProjectStore} from './control.mjs';
+import {collectFeedback} from './feedback-core.mjs';
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'wf7-feedback-'));
+let n=0;const fixture=()=>{const project=path.join(root,String(n++));fs.mkdirSync(project);return {project,stateRoot:path.join(root,'state')};};
+const response=rows=>({ok:true,status:200,headers:{get:()=> 'etag'},json:async()=>rows});
+test('pagination preserves original since and advances after final page',async()=>{const f=fixture(),calls=[],rows=Array.from({length:30},(_,i)=>({id:i+1,title:'fixture',body:'text',updated_at:`2026-10-14T00:00:${String(i).padStart(2,'0')}Z`}));let page=0;const options={...f,fetcher:async url=>{calls.push(String(url));return response(page++===0?rows:[]);}};assert.equal((await collectFeedback(f.project,'test/repo',options)).accepted,30);await collectFeedback(f.project,'test/repo',options);await collectFeedback(f.project,'test/repo',options);assert.match(calls[1],/page=2/);assert(!calls[1].includes('since='));assert(calls[2].includes('since='));});
+test('duplicate revisions do not append ledger; 304 is idle',async()=>{const f=fixture(),row={id:1,title:'fixture',updated_at:'r1'};let result=await collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>response([row])});assert.equal(result.accepted,1);const store=new ProjectStore(f.project,f),before=store.read().sequence;result=await collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>response([row])});assert.equal(result.accepted,0);assert.equal(store.read().sequence,before);result=await collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>({status:304})});assert.equal(result.changed,false);assert.equal(result.modelRequests,0);});
+test('collector refuses parallel cursor writes and releases own lease',async()=>{const f=fixture();let release;const pending=collectFeedback(f.project,'test/repo',{...f,fetcher:()=>new Promise(resolve=>{release=resolve;})});await assert.rejects(()=>collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>response([])}),/collector lock/);release(response([]));await pending;assert.equal((await collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>response([])})).accepted,0);});
+test('network failure and credential payload do not trigger replies/model calls',async()=>{const f=fixture();await assert.rejects(()=>collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>({ok:false,status:429})}),/429/);const r=await collectFeedback(f.project,'test/repo',{...f,fetcher:async()=>response([{id:1,updated_at:'r1',title:'sk-'+'A'.repeat(32)}])});assert.equal(r.rejected,1);assert.equal(r.modelRequests,0);assert.equal(r.externalReplies,0);assert.deepEqual(new ProjectStore(f.project,f).read().events,{});});

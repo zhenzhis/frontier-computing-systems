@@ -1,0 +1,12 @@
+ZhenZhi Workflow contains original workflow/controller integration and a calm
+theme derived from pi-muelsyse-macaron (MIT).
+Theme source: https://github.com/xMuelsysex/pi-muelsyse-macaron
+Reviewed upstream commit: 6894e18878ca8b8bc65f0e0c6eb5b9beddbf8621
+Copyright (c) 2026 pi-muelsyse-macaron contributors.
+Original license: licenses/pi-muelsyse-macaron-MIT.txt
+
+Pi coding-agent / pi-tui (MIT) and pi-permission-system (MIT) are separately
+versioned dependencies. Their original licenses remain in the installed packages.
+This project does not vendor their implementation or claim their benchmark scores.
+External research papers, articles and repositories retain their own rights;
+research notes link to primary sources rather than redistributing full articles.
