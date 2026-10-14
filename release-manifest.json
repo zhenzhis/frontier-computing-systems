@@ -42,7 +42,7 @@
     },
     {
       "path": "docs/maintenance.md",
-      "sha256": "d47812af79f1ea7ec19325e57ea1cd3bff7f889f1910b7b6f980dcf0da336786"
+      "sha256": "94e36967343f4eb4506cbc21e8e124254058fbcad91d2cc653c0e23339bdfbe4"
     },
     {
       "path": "docs/research/intent-routing.md",
@@ -198,7 +198,7 @@
     },
     {
       "path": "scripts/release.mjs",
-      "sha256": "b5d0b4af345c7abca77028cdf37aaaeb48f50501bcb6bebcd9247088b9d4c3ea"
+      "sha256": "cb10d72de7ff5430aa19b384c4693759b6931a5597b81959ffcbc11fa4a882fe"
     },
     {
       "path": "scripts/verify-links.mjs",
