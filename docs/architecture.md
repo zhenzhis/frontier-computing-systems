@@ -1,5 +1,7 @@
 # 架构与边界
 
+Frontier Computing Systems（FCS）是研究项目；当前工程实现称为 **FCS Pi Workflow**。研究范围与验证方法见 [研究纲领](../RESEARCH.md)。现有 Pi 包、控制器和状态协议不是一个已经完成的通用自主研究系统。
+
 本项目把可移植工作流源码、用户运行状态、真实部署配置分开。公开源码由 Git 和固定依赖管理；任务账本在用户目录；Provider、认证、MCP 和私人会话由 Pi 自己的配置目录管理。
 
 ```mermaid

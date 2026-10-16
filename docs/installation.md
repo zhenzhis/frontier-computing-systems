@@ -7,7 +7,7 @@
 在项目根目录运行；这个过程写入新的试用目录，不覆盖活动配置。
 
 ```powershell
-$trial = Join-Path $env:TEMP ('zhenzhi-workflow-trial-' + [guid]::NewGuid().ToString('N'))
+$trial = Join-Path $env:TEMP ('fcs-pi-trial-' + [guid]::NewGuid().ToString('N'))
 $env:PI_CODING_AGENT_DIR = $trial
 pi install .
 pi

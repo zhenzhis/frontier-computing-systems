@@ -1,7 +1,7 @@
 {
-  "name": "zhenzhi-workflow",
+  "name": "frontier-computing-systems",
   "version": "0.1.0",
-  "description": "Versioned, reversible Pi workflows for deliberate agent engineering on Windows.",
+  "description": "Agent systems, harnesses and evaluation research; versioned, reversible Pi workflow implementation.",
   "license": "MIT",
   "type": "module",
   "private": true,
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/zhenzhis/zhenzhi-workflow.git"
+    "url": "https://github.com/zhenzhis/frontier-computing-systems.git"
   },
   "scripts": {
     "test": "node --test runtime/*.test.mjs tests/*.test.mjs",
@@ -52,6 +52,7 @@
     "LICENSE",
     "README.md",
     "scripts/verify-manifest.mjs",
-    "release-manifest.json"
+    "release-manifest.json",
+    "RESEARCH.md"
   ]
 }

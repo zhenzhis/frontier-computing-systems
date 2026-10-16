@@ -25,7 +25,7 @@ try{
   const tests=['runtime/control.test.mjs','runtime/feedback.test.mjs',...fs.readdirSync(path.join(root,'tests')).filter(x=>x.endsWith('.test.mjs')).map(x=>'tests/'+x)];
   execFileSync(process.execPath,['--test',...tests],{cwd:root,stdio:'inherit'});
   const before=backup(root,destination,{apply:true});
-  git('tag','-a',tag,'-m',`ZhenZhi Workflow ${version}`);
+  git('tag','-a',tag,'-m',`Frontier Computing Systems ${version}`);
   const after=backup(root,destination,{apply:true});
   if(plan.push)git('push','origin',tag);
   console.log(JSON.stringify({...plan,before:before.folder,after:after.folder,completed:true},null,2));

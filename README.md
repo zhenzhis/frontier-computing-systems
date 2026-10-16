@@ -1,8 +1,14 @@
-# ZhenZhi Workflow
+# Frontier Computing Systems
+
+**FCS · Agent Systems, Harnesses & Evaluation**
+
+研究、构建并验证 AI 原生计算系统：以真实任务为中心，研究 Agent、Harness、上下文与记忆、工具协作、评测和受控自动化。正式研究计划名为 **Frontier Computing Systems Research**；日常简称 **FCS**，内部短标识 `fcs`。
+
+本项目于 2026-10-16 从 **ZhenZhi Workflow** 更名，延续同一 Git 历史。研究定位与工作方法见 [研究纲领](RESEARCH.md)，命名决策与前沿研究对照见 [本次研究记录](docs/research/fcs-positioning.md)。名称表达研究方向，不代表已经达到前沿研究水平。
 
 可版本管理、可恢复、以实际验收为依据的 Pi 工作流。把日常开发、研究、长任务、记忆和实验放进一个可维护的工程项目，逐步迭代，而不是堆叠越来越长的提示词。
 
-**首个公开版本：0.1.0。** 从私人 WF6/WF7 工作流整理而来；公开版本使用独立历史，不携带个人配置、账号、会话或部署回执。Node 24.12.0+，Pi 1.2.0。Windows PowerShell 7 是可选权限适配器的要求；控制器在 CI 的 Windows/Linux 上验证。
+**当前工程实现：FCS Pi Workflow。首个公开版本：0.1.0，发布时名为 ZhenZhi Workflow。** 从私人 WF6/WF7 工作流整理而来；公开版本使用独立历史，不携带个人配置、账号、会话或部署回执。项目更名不重发旧版本，也不隐式迁移活动配置或任务状态。Node 24.12.0+，Pi 1.2.0。Windows PowerShell 7 是可选权限适配器的要求；控制器在 CI 的 Windows/Linux 上验证。
 
 ## 能力
 
@@ -18,8 +24,8 @@
 ## 开发与验证
 
 ```powershell
-git clone https://github.com/zhenzhis/zhenzhi-workflow.git
-cd zhenzhi-workflow
+git clone https://github.com/zhenzhis/frontier-computing-systems.git
+cd frontier-computing-systems
 npm ci --ignore-scripts
 npm run verify
 npm run verify:sdk
@@ -34,7 +40,7 @@ npm run verify:sdk
 在已配置好 Provider 的隔离配置目录试用：
 
 ```powershell
-$env:PI_CODING_AGENT_DIR = Join-Path $env:TEMP 'zhenzhi-workflow-trial'
+$env:PI_CODING_AGENT_DIR = Join-Path $env:TEMP 'fcs-pi-trial'
 pi install .
 pi
 # /workflow-status
@@ -58,4 +64,4 @@ node scripts/backup.mjs --destination <你的私有备份目录> --apply
 
 [维护与发布规范](docs/maintenance.md)说明版本升级、备份、回退和验收。`scripts/release.mjs` 默认只展示计划，显式执行前要求干净已提交状态与备份目标。仓库不会自行定时更新或部署。
 
-研究结论在 [docs/research](docs/research/README.md)，当前路线在 [ROADMAP.md](ROADMAP.md)。贡献请看 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请看 [SECURITY.md](SECURITY.md)。MIT；第三方许可与出处见 [NOTICE](NOTICE)。
+研究从 [RESEARCH.md](RESEARCH.md) 开始，已有结论在 [docs/research](docs/research/README.md)，当前路线在 [ROADMAP.md](ROADMAP.md)。贡献请看 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请看 [SECURITY.md](SECURITY.md)。MIT；第三方许可与出处见 [NOTICE](NOTICE)。

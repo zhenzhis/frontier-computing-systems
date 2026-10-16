@@ -1,4 +1,6 @@
-# ZhenZhi Workflow 本地任务运行机制
+# FCS Pi Workflow 本地任务运行机制
+
+项目由 ZhenZhi Workflow 更名为 Frontier Computing Systems（FCS）。以下协议标识与状态路径保留兼容，不代表项目仍使用旧名称；更名没有改变运行时行为。
 
 版本 zhenzhi-workflow-v0.1.0，Pi 1.2.0、Node 24.12.0。这是普通 Pi 会话旁的有限任务控制器。全局启动没有新增轮询、模型请求或常驻服务；本公开版本未包含 Pi Durable 实验。
 

@@ -18,19 +18,19 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "6c09241b35fdf42ba1590fc5fed6365c6962483f6bc94b896ea3d346879e1ac3"
+      "sha256": "e47a23c42dbcba3c170c9264050a728c7fd6928b77562b3f54d1c7b6e543e939"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "9c0b830f64e8ff35405d155df6cc2fe292dd0302ad6b9148de26c30f56e59f03"
+      "sha256": "9f2bff73158fe7fe89db4c1bc2049cd01bfee2d7b6740b1a07ef3cc39a50b4b9"
     },
     {
       "path": "CONTRIBUTING.md",
-      "sha256": "881afd0048c1a37d9681935105f426ddfe4a70519861992af88a0103e20cfc59"
+      "sha256": "dc7ba9038009a7a90ba518de5491fb58aec94e0fdb5786af810f23d0c542cfde"
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "3537b9aab0e21cc31dcaaf3e75b4e32736f4886a775a18f96da3b35f80540bf3"
+      "sha256": "d6483b49c9c71e3475889284d39eefa5f498ce55079184d1f43418c701619942"
     },
     {
       "path": "docs/decisions/0001-public-project.md",
@@ -38,11 +38,15 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "14c479028f028eb6b5468360a7466bf628b4ddf5194e39e583c8929b5cdd30cb"
+      "sha256": "729c8df187b1f9c5f5da99497c29190cda569fa5c74e99f60fe3ec8690a57bef"
     },
     {
       "path": "docs/maintenance.md",
-      "sha256": "94e36967343f4eb4506cbc21e8e124254058fbcad91d2cc653c0e23339bdfbe4"
+      "sha256": "81a7e9c24f9045a3dc6ebc03985ba4409ab273462dae513d3ae4492473570329"
+    },
+    {
+      "path": "docs/research/fcs-positioning.md",
+      "sha256": "c5677c4c0da928005d3668eeefd36d13834de7e5e6b6fc2124e77e5b0423ab6b"
     },
     {
       "path": "docs/research/intent-routing.md",
@@ -54,7 +58,7 @@
     },
     {
       "path": "docs/research/README.md",
-      "sha256": "f4bd38d03d1a448bd8285917cb3e0d691ba77035f3e34d0eeb81d174a2c53068"
+      "sha256": "4eec1c088e9992a905683e69f37ee7b4dd8d93f0c56f4f8dd7a3e9a13f42367e"
     },
     {
       "path": "docs/tasks/bootstrap.md",
@@ -126,27 +130,31 @@
     },
     {
       "path": "NOTICE",
-      "sha256": "c1c50c5d614bf088ae548bf7d2daefb57b827e9110eb71e3c67c81998b51f5f4"
+      "sha256": "0a6239ee164cc19d240c8fbb3c653a51f2f49d38a72d3dbe00b0749543483d2c"
     },
     {
       "path": "package-lock.json",
-      "sha256": "f69d8fa7a40229663d9290bb8399a384fbfe837b778025e7e3c8452cde3be8a7"
+      "sha256": "ac9a8e65383b37f99268e5b2894f3ccc536478f128fdbef8702e10166d95b490"
     },
     {
       "path": "package.json",
-      "sha256": "cdacea0cec1954f4490b1433eac8eab166abbf313dd8f22fbe4d77079ba4d7c1"
+      "sha256": "9dca8d8ecb25c5af95ee9e1cc47482e8d469ba1be2adc134b043e93074cffcc5"
     },
     {
       "path": "README.en.md",
-      "sha256": "df33ce4c49b64543e0f2a181102d0d17a41365d87b5f48bdb0ecbdfda0ff040c"
+      "sha256": "9115d0fcd96dbce1a86967ad0b829a9d53140e982f7801cf8f26b2b190172648"
     },
     {
       "path": "README.md",
-      "sha256": "2c6a4502d9178afc7ecd147643bcfe34a0306e22c76a62c948efff8737648707"
+      "sha256": "40e9b5dc53a4fa5bcd80f80410354de73d2dc8c67dcce511d53d7de5b45b1bcd"
+    },
+    {
+      "path": "RESEARCH.md",
+      "sha256": "2213cf0b6601c1eb38d29009096c4c95eeeee521c5d8cb0ba0a603e31d51aff9"
     },
     {
       "path": "ROADMAP.md",
-      "sha256": "c5cfa512be4caf63cd9d57acead4a7f12554b7b5c0a448b5b73d5bdb9a8d9c5b"
+      "sha256": "a696ab07fcf7a7c0d586f50f95741108c106c654abaac533430afdfa2c3eaab4"
     },
     {
       "path": "runtime/cli.mjs",
@@ -178,7 +186,7 @@
     },
     {
       "path": "runtime/README.md",
-      "sha256": "6c2f9bfab21d6aee7708a355c324cd579eab20a6b556d0e6ad496835d38c9aa0"
+      "sha256": "32dd6818dbbc175b5562e676b9a8f647d822bcec8679c511db6afa1c43c43fc4"
     },
     {
       "path": "runtime/worker-policy.mjs",
@@ -198,7 +206,7 @@
     },
     {
       "path": "scripts/release.mjs",
-      "sha256": "cb10d72de7ff5430aa19b384c4693759b6931a5597b81959ffcbc11fa4a882fe"
+      "sha256": "839fa55f807687f10135c5111abd5c270b81e0d7da429cbb887f985603d4ec91"
     },
     {
       "path": "scripts/verify-links.mjs",
@@ -223,6 +231,10 @@
     {
       "path": "templates/任务与记忆模板.md",
       "sha256": "21cfc50383a4b55d85e208a6b2d96c006d43ead480b16917769473fd7c002ae2"
+    },
+    {
+      "path": "templates/研究记录.md",
+      "sha256": "2e986f97c56d71399955b46bf4116504d94fb55e362a016f02856104040797b2"
     },
     {
       "path": "tests/backup.test.mjs",

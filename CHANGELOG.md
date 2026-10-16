@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rename the project to Frontier Computing Systems (FCS), with the formal research program Frontier Computing Systems Research and repository/package identity `frontier-computing-systems`.
+- Add a research charter, a proportionate investigation template and a source-based positioning decision; retain manual model-role selection and deferred intent routing.
+- Record the maintainer's local-first deployment/release order. This identity and documentation change does not migrate the active Pi profile, change legacy state identifiers or rewrite the original v0.1.0 release.
+
 ## 0.1.0 — 2026-10-14
 
 - First public source release extracted from privately versioned WF6/WF7.

@@ -1,4 +1,4 @@
-# Working agreements
+# Frontier Computing Systems — Working agreements
 
 - 默认用中文与维护者沟通。Follow the user's current objective, authorized effects and explicit stage boundaries.
 - This repository is the canonical public source. The active personal Pi deployment is separate. Developing, testing or publishing this project does not authorize changing a user's providers, secrets, permissions or running sessions.
@@ -8,7 +8,9 @@
 - Ordinary authorized development continues automatically. Unapproved destructive actions, production effects, access/secret changes and external communications require explicit authorization. Existing authorization persists within scope.
 - For complex work, record the objective, accepted constraints, current revision, evidence, failures, next actions and unresolved external effects. Read/attach/resume never activates a worker.
 - Keep experiment, selection and held-out evaluation separate. Promote lessons only after evidence review. Passing a self-reported field is not independent validation.
+- For research claims follow RESEARCH.md: state a falsifiable question, freeze the full experimental condition, compare with a baseline, retain failures and independently check actual outcomes. Repeated trials and uncertainty should match the claim; do not infer broad superiority from one local result. Use the research template for substantive investigations, not routine edits.
+- Use Frontier Computing Systems / FCS / fcs for project identity. Preserve legacy runtime identifiers, existing state paths, released tags and original attribution until an explicitly reviewed migration. The current Pi workflow is one implementation, not the entire research scope.
 - Run `npm run verify` and `npm run verify:sdk` for changed runtime/extensions. Use isolated fixtures, never real credentials or paid inference for default tests. Refresh `release-manifest.json` after intentional source changes.
-- Before a release: update version/changelog, validate, make the exact candidate clean and committed, back up Git history and version snapshots to the user's private destination, then tag and push only within authorization. Never rewrite released tags or old receipts to hide drift.
-- Intent-based model routing and per-turn classifier effort are deferred (ADR 0002). Do not enable them from research documents. Manual model-role selection remains the baseline.
+- Maintainer iteration order: back up the active local workflow first; implement the authorized optimization locally and verify the actual local deployment; then prepare the sanitized public candidate, version/changelog, source backups and exact-commit CI before publishing a formal tag. Source tests or an isolated SDK load do not prove the maintainer's active configuration was updated. Documentation-only changes do not require touching active configuration. Never rewrite released tags or old receipts to hide drift.
+- Intent-based model routing and per-turn classifier effort are deferred (docs/research/intent-routing.md). Do not enable them from research documents. Manual model-role selection remains the baseline.
 - Public content must not include personal deployment receipts, model/account inventories, credentials, sessions, runtime state, or machine-specific home paths. Keep vendor provenance and licenses.

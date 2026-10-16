@@ -1,5 +1,7 @@
 # 研究与决策索引
 
+项目现名 Frontier Computing Systems（FCS）。新研究先阅读 [研究纲领](../../RESEARCH.md)，按需使用 [研究记录模板](../../templates/研究记录.md)。[命名与研究实践决策](fcs-positioning.md) 说明本项目与 AI co-scientist、AI Scientist 及 Agent 评测方法的关系。
+
 这些笔记是私人 WF6/WF7 研究的公开摘要，保留可学习的方法和来源，省略账号、私人会话、本地模型清单及部署回执。研究意见不授予写入、发布、外部发信或计费权限。
 
 | 主题 | 本项目采用 | 保留探索 |

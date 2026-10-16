@@ -1,5 +1,10 @@
 # Contributing
 
+Frontier Computing Systems (FCS) studies agent systems, harnesses and evaluation.
+Research contributions should follow [RESEARCH.md](RESEARCH.md), state the tested
+condition and baseline, preserve negative results, and distinguish measured
+outcomes from hypotheses. A routine fix does not require a research proposal.
+
 Describe the concrete problem, accepted behavior and reproducible evidence.
 Keep one change focused; do not introduce a new harness merely because it is popular.
 

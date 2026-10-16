@@ -1,5 +1,10 @@
 # Roadmap
 
+Frontier Computing Systems (FCS) studies agent systems, harnesses and evaluation.
+The current implementation is FCS Pi Workflow. See [RESEARCH.md](RESEARCH.md) for
+the research scope and evidence requirements; these are priorities, not claims
+that new capabilities or experiments are already deployed.
+
 ## Stable priorities
 
 1. Preserve recoverable versions and observable acceptance.
@@ -10,6 +15,9 @@
 
 ## Candidate work
 
+- Establish a representative, versioned baseline for the current workflow before claiming improvements.
+- Evaluate context recovery, memory promotion and bounded automation with ablations, independent outcomes and quality/cost/time tradeoffs.
+- Reproduce selected external findings at a pinned revision before adopting them; publish negative results and limitations when appropriate.
 - More representative recovery, context-fidelity and multi-model role evaluations.
 - Explicit state archival/migration as ledger limits are approached.
 - Tested, user-reviewed integration profiles for optional skills/packages/MCP.
