@@ -47,7 +47,9 @@ writer.lock 不会自动抢占；确认所属进程已退出后 `unlock-dead <pi
 
 `node runtime/feedback.mjs <project> owner/repo` 是手动、公开 GitHub Issues/PR 的单页只读采集，每页 30，ETag/时间游标/事件修订去重，零 LLM 调用；重复修订不追加账本。第一次没有 since 会从历史最早页开始；后续调用继续分页。独立采集锁拒绝同源并发写游标；采集器意外终止时保留锁，不自动抢占。没有 X/Discord 凭据适配器，也不回复、合并或发布。不要把有限分页当完整实时监控。
 
-注册 experiment（id/change/baseline/candidate/splits/maxTrials），准备包含 experimentId/candidateHash/maxTrials/cases 的 JSON；每 case 指定 id/split/executable（绝对路径）/args（数组）/timeoutMs。report 用例还需 oracleFile，其真实路径必须位于工作器项目之外。`node runtime/evaluate.mjs <project> <plan.json>` 实际运行可信检查，保存输出哈希/退出码/耗时和独立 JSON 产物，监测 plan/oracle 是否被更改。它不是 OS 沙箱，禁止用来执行不可信候选程序；完整作弊防护和模型盲评仍需专门环境。实验结果能辅助决策，不能单凭退出码证明所有语义正确。
+新比较使用 evaluation v2：在 experiment 中登记完整 `evaluation` 计划，控制器计算实际声明输入的哈希，冻结模型/环境条件、各臂、任务族/分集、用例/重复、执行与验收命令以及审核策略。评估请求只引用登记后的 digest，不重新传入可变命令。`node runtime/evaluate.mjs <project> <request.json> [isolated-state-root]` 运行可信适配器并单独调用外部验收器；记录执行结果、任务结果、试验有效性和实际工件。完整结构、命令与限制见 [评估协议](../docs/evaluation.md)。
+
+旧格式与历史记录继续可读，旧入口仍提供有限的进程检查，不能用于新版采纳审核；不会把旧记录改写成已验证结论。`/workflow-evals summary {"id":"example"}` 或 `node runtime/cli.mjs <project> evaluation-summary <id>` 会重新核对绑定和工件，报告缺失、失败、比较与不确定性。审核不自动部署。先执行 `npm run demo:evaluation` 可体验零模型调用的完整验收流程；这些合成任务不代表模型能力提升或维护者体验结论。
 
 先用 /workflow-retro 产生候选，再 /workflow-experiment 验证一项；开发组调试，选择组选方案，最终组只报告。下一轮可以采用“反馈采集→分类→一项有限任务→验收→复盘”，无新证据则停止。持续排程、自动发信/合并/上线、跨主机与生产发布需另行落实项目授权和适配器；本版本没有默认开启。
 

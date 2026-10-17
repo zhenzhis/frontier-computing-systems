@@ -45,3 +45,5 @@
 - [Anthropic: Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)：评估模型与 Harness 的组合，区分运行轨迹、环境结果、能力评测和回归评测。
 
 这些方法用于校准研究设计，不表示本项目已复现其系统或具备其报告能力。详细取舍见 [定位决策](docs/research/fcs-positioning.md)。
+
+当前评估分层、近期方法、任务集/评分器校准与实际体验设计见 [测试与研究方法](docs/research/evaluation-methods.md)；可执行证据格式见 [评估协议](docs/evaluation.md)。工程测试、真实模型试验、独立复核与维护者体验分别报告，不互相替代。

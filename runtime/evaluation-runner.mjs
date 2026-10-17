@@ -1,0 +1,53 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { artifactHash, checkBindings } from './evaluation.mjs';
+
+export function runEvaluation(store, request, planFile, runCheck, safeData) {
+  const allowed = ['schemaVersion', 'experimentId', 'evaluationDigest'];
+  if (Object.keys(request).some(key => !allowed.includes(key))) throw Error('Evaluation v2 commands come only from the registered frozen plan');
+  const experiment = store.read().experiments[request.experimentId];
+  if (experiment?.status !== 'candidate' || experiment.evaluation?.schemaVersion !== 2 || request.evaluationDigest !== experiment.evaluation.digest) throw Error('Registered evaluation identity mismatch');
+  const contract = experiment.evaluation, requestHash = artifactHash(planFile), recorded = new Set(experiment.runs.map(row => row.trialId));
+  const results = [];
+  for (const trial of contract.plan.trials) {
+    if (recorded.has(trial.id)) continue;
+    checkBindings(contract);
+    if (artifactHash(planFile) !== requestHash) throw Error('Evaluation request changed');
+    if ([trial.outputFile, trial.assessmentFile].some(file => fs.existsSync(file))) throw Error('Trial outputs must be fresh; inspect before execution');
+    const attempt = store.beginEvaluation(experiment.id, trial.id);
+    const execution = runCheck(trial.command);
+    const verification = runCheck(trial.verify);
+    let assessment, validity = 'valid', invalidReason = null;
+    try {
+      assessment = JSON.parse(fs.readFileSync(trial.assessmentFile, 'utf8'));
+      if (!['passed', 'failed'].includes(assessment.taskOutcome) || typeof assessment.hardConstraintsPassed !== 'boolean' || (assessment.validity !== undefined && !['valid', 'invalid'].includes(assessment.validity))) throw Error();
+      if (assessment.metrics && (typeof assessment.metrics !== 'object' || Object.values(assessment.metrics).some(value => typeof value !== 'number' && typeof value !== 'string'))) throw Error();
+      if (assessment.metrics && ['cost', 'tokens', 'interventions'].some(key => assessment.metrics[key] !== undefined && (!Number.isFinite(assessment.metrics[key]) || assessment.metrics[key] < 0))) throw Error();
+      if (verification.outcome !== 'passed' || !artifactHash(trial.outputFile) || assessment.validity === 'invalid' || (execution.outcome !== 'passed' && assessment.taskOutcome !== 'failed')) throw Error();
+    } catch { validity = 'invalid'; invalidReason = 'Missing, inconsistent or invalid verifier assessment/output'; }
+    try { checkBindings(contract); if (artifactHash(planFile) !== requestHash) throw Error(); }
+    catch { validity = 'invalid'; invalidReason = 'Frozen input or request changed during trial'; }
+    const row = safeData({
+      schemaVersion: 2, trialId: trial.id, attemptId: attempt.attemptId, caseId: trial.caseId,
+      split: contract.plan.cases.find(item => item.id === trial.caseId).split, arm: trial.arm,
+      conditionHash: contract.armHashes[trial.arm], contractHash: contract.digest,
+      execution, verification, validity, invalidReason,
+      taskOutcome: validity === 'valid' ? assessment.taskOutcome : 'not-evaluated',
+      hardConstraintsPassed: validity === 'valid' ? assessment.hardConstraintsPassed : null,
+      metrics: validity === 'valid' ? assessment.metrics ?? null : null,
+      output: { path: trial.outputFile, sha256: artifactHash(trial.outputFile) },
+      assessment: { path: trial.assessmentFile, sha256: artifactHash(trial.assessmentFile) },
+    });
+    const directory = path.join(store.root, 'evaluations', experiment.id);
+    fs.mkdirSync(directory, { recursive: true });
+    const artifact = path.join(directory, `${trial.id}-${attempt.attemptId}.json`);
+    fs.writeFileSync(artifact, JSON.stringify(row, null, 2) + '\n', { flag: 'wx' });
+    store.experimentResult(experiment.id, { trialId: trial.id, artifact, artifactHash: artifactHash(artifact) });
+    results.push(row);
+    if (validity !== 'valid') break;
+  }
+  let summary;
+  try { summary = store.evaluationSummary(experiment.id); }
+  catch { summary = { eligible: false, decision: 'insufficient-evidence', reasons: ['Frozen input or recorded evidence no longer matches'], automaticallyAdopted: false }; }
+  return { experiment: experiment.id, runs: results, summary, automaticallyAdopted: false };
+}

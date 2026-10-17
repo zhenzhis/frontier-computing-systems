@@ -31,6 +31,7 @@ try {
     case 'experiment':result=store.proposeExperiment(read());break;
     case 'experiment-result':result=store.experimentResult(id,read());break;
     case 'experiment-review':result=store.reviewExperiment(id,read());break;
+    case 'evaluation-summary':result=store.evaluationSummary(id);break;
     default:throw Error('Unknown command');
   }
   console.log(JSON.stringify(result,null,2));

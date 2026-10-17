@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "9f2bff73158fe7fe89db4c1bc2049cd01bfee2d7b6740b1a07ef3cc39a50b4b9"
+      "sha256": "47413bc0fbb11f21cf7dc32cf72ea2a730e6bef1a7adff2a1596de87fbde1c75"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -37,12 +37,20 @@
       "sha256": "de53eef24124e1e9d16495a6bc707535f0bc414a5e38564dc802d0962514a51d"
     },
     {
+      "path": "docs/evaluation.md",
+      "sha256": "903e53599a05014779edccef2f7c2e9866ebbac1ca441a6f7c5bfbb83c9cd2f0"
+    },
+    {
       "path": "docs/installation.md",
       "sha256": "729c8df187b1f9c5f5da99497c29190cda569fa5c74e99f60fe3ec8690a57bef"
     },
     {
       "path": "docs/maintenance.md",
       "sha256": "81a7e9c24f9045a3dc6ebc03985ba4409ab273462dae513d3ae4492473570329"
+    },
+    {
+      "path": "docs/research/evaluation-methods.md",
+      "sha256": "57a6d5254153c09edd7632a28c58d1edf48da55ea84f8aa693fbf71f2cbfe8d0"
     },
     {
       "path": "docs/research/fcs-positioning.md",
@@ -90,7 +98,7 @@
     },
     {
       "path": "managed/extensions/workflow-runtime/index.ts",
-      "sha256": "c8c05a50f7ca31eba14ec3d0244856022acfedb8197445ead4485a9cf4583674"
+      "sha256": "4ca625067632711ace2fb19151a68ba4188d4740d09bcda635b470d98b1db865"
     },
     {
       "path": "managed/prompts/workflow-dev.md",
@@ -98,7 +106,7 @@
     },
     {
       "path": "managed/prompts/workflow-experiment.md",
-      "sha256": "a48876cd91188702dc7a8b66e8caeaf1ab09d2b4b1890032c4d10bca91411cc2"
+      "sha256": "251b44c96626c9a651a39495ad6c811a6a7fdd63c9745d793d6e1cb012c33b35"
     },
     {
       "path": "managed/prompts/workflow-long.md",
@@ -134,11 +142,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "ac9a8e65383b37f99268e5b2894f3ccc536478f128fdbef8702e10166d95b490"
+      "sha256": "31b1d371734ddcc2104950a4b3e51375a783b2fb7e0d496638e65ee8946226fb"
     },
     {
       "path": "package.json",
-      "sha256": "9dca8d8ecb25c5af95ee9e1cc47482e8d469ba1be2adc134b043e93074cffcc5"
+      "sha256": "1f00411669fe7ad81bfbe6fbbfbefb973b580e96d91451676bea4f56c2d53570"
     },
     {
       "path": "README.en.md",
@@ -150,7 +158,7 @@
     },
     {
       "path": "RESEARCH.md",
-      "sha256": "2213cf0b6601c1eb38d29009096c4c95eeeee521c5d8cb0ba0a603e31d51aff9"
+      "sha256": "358ef26227021cd1af62662e6b7c41f6cb59c8ac70d069010f4519f004bb9bbe"
     },
     {
       "path": "ROADMAP.md",
@@ -158,11 +166,11 @@
     },
     {
       "path": "runtime/cli.mjs",
-      "sha256": "600138998da019764a6b991ce9d3c6b742895cb36256a629fa0e1f8d7a4503f5"
+      "sha256": "7e4907118da1aa8de7100a7b5baf3743b932b6348d2feb60eca59cfa8aba1e2e"
     },
     {
       "path": "runtime/control.mjs",
-      "sha256": "85be490bd149b78896435cb4449ef420e2f38fe1f789a6251658f0d45c190659"
+      "sha256": "f491a5b6ce3e687ca4d3c81eb97bf9df15045c15e6104549cf30c016c15af5d6"
     },
     {
       "path": "runtime/control.test.mjs",
@@ -170,7 +178,15 @@
     },
     {
       "path": "runtime/evaluate.mjs",
-      "sha256": "cf07bbf9a1012ba222bb78dcde0974e3f034d1bd8d2306b61e604624e627b79b"
+      "sha256": "c12e99bd5d1bfe6b390b3c817b0ced2dd0cb36a2fb1009b90d1e477395bc7722"
+    },
+    {
+      "path": "runtime/evaluation-runner.mjs",
+      "sha256": "ee6002f5d023e942b55242fde89b3929a0a3272a18cb423e5600c7a0a23afe43"
+    },
+    {
+      "path": "runtime/evaluation.mjs",
+      "sha256": "50e8fb7e33f8e48b3d99d9ba15dac2ade74914529901b8dcbdd940bd748bebe2"
     },
     {
       "path": "runtime/feedback-core.mjs",
@@ -186,7 +202,7 @@
     },
     {
       "path": "runtime/README.md",
-      "sha256": "32dd6818dbbc175b5562e676b9a8f647d822bcec8679c511db6afa1c43c43fc4"
+      "sha256": "cc2d93b0bffc9f91a08e9caa0ded7008b94d4ebcd965b7d8f96673e205b5b109"
     },
     {
       "path": "runtime/worker-policy.mjs",
@@ -203,6 +219,10 @@
     {
       "path": "scripts/backup.mjs",
       "sha256": "a608b1a0d9e5a69ec421f4cafb03ae555731f3646158afc5bfc3492be7b193d8"
+    },
+    {
+      "path": "scripts/evaluation-demo.mjs",
+      "sha256": "5f4313380f192f01e1fddba133038f767adb1cd56b34032e62d1f49f023dec52"
     },
     {
       "path": "scripts/release.mjs",
@@ -233,12 +253,24 @@
       "sha256": "21cfc50383a4b55d85e208a6b2d96c006d43ead480b16917769473fd7c002ae2"
     },
     {
+      "path": "templates/体验验收.md",
+      "sha256": "6c1bd9f50d0615399d9dc59b8408f2cbbe87e7b37eff23bfa1a6326e03f65af1"
+    },
+    {
       "path": "templates/研究记录.md",
-      "sha256": "2e986f97c56d71399955b46bf4116504d94fb55e362a016f02856104040797b2"
+      "sha256": "481e0e261b5068cd73707b155e0e6ef809f2a9f56ad3d9bcd50acad1afabbf02"
     },
     {
       "path": "tests/backup.test.mjs",
       "sha256": "d46fa7a276da79062a1d8b31430ca9545a1b46c2de5b18e7ba98e3e11852f003"
+    },
+    {
+      "path": "tests/evaluation-fixture.mjs",
+      "sha256": "bd4dc703ef351da95064aeede573202ed39062ae5f6316c6b2dacc860006c6b3"
+    },
+    {
+      "path": "tests/evaluation.test.mjs",
+      "sha256": "7e4f9ae7008b085b82a0455ed12c97659c228b4d71f121f24a29592b4b7b6cc3"
     },
     {
       "path": "tests/publication.test.mjs",

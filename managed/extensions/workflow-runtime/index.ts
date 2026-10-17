@@ -63,10 +63,11 @@ export default function workflowRuntime(pi: ExtensionAPI) {
     })
   });
   pi.registerCommand('workflow-evals',{
-    description:'自迭代实验：list / propose JSON / result JSON / review JSON；不会自动采纳文件',
+    description:'自迭代实验：list / summary JSON / propose JSON / result JSON / review JSON；不会自动采纳文件',
     handler:guarded(async(args,ctx)=>{
       const i=args.indexOf(' '),action=(i<0?args:args.slice(0,i)).trim()||'list',rest=i<0?'':args.slice(i+1);const s=await store(ctx);
       if(action==='list')return s.read().experiments;
+      if(action==='summary')return s.evaluationSummary(JSON.parse(rest).id);
       trusted(ctx);const input=JSON.parse(rest);
       if(action==='propose')return s.proposeExperiment(input);
       if(action==='result')return s.experimentResult(input.id,input.record);

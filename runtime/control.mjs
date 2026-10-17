@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { freezeEvaluation, checkBindings, readEvaluationReceipt, summarizeEvaluation } from './evaluation.mjs';
 
 export const VERSION = 'zhenzhi-workflow-v0.1.0';
 export const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -183,14 +184,19 @@ export class ProjectStore {
   proposeExperiment(input) {
     if(!idPattern.test(input.id??'')||!input.change||!input.baseline||!input.candidate||!input.splits?.development||!input.splits?.selection||!input.splits?.report||new Set(Object.values(input.splits)).size!==3)throw Error('Experiment needs one change, baseline/candidate and distinct splits');
     if(!Number.isInteger(input.maxTrials)||input.maxTrials<1||input.maxTrials>100)throw Error('Finite experiment trials required');
-    return this.transaction('experiment.propose',state=>{if(state.experiments[input.id])throw Error('Experiment already exists');state.experiments[input.id]={...safeData(input),status:'candidate',runs:[]};return state.experiments[input.id];});
+    const evaluation=input.evaluation?freezeEvaluation(this.project,input.evaluation,input.maxTrials):null;
+    return this.transaction('experiment.propose',state=>{if(state.experiments[input.id])throw Error('Experiment already exists');state.experiments[input.id]={...safeData(input),evaluation,status:'candidate',runs:[],attempts:[]};return state.experiments[input.id];});
   }
+  beginEvaluation(id,trialId) {
+    return this.transaction('experiment.reserve',state=>{const e=state.experiments[id];if(!e||e.status!=='candidate'||!e.evaluation)throw Error('Registered evaluation v2 required');checkBindings(e.evaluation);if(!e.evaluation.plan.trials.some(t=>t.id===trialId))throw Error('Unknown frozen trial');if(e.attempts.some(a=>a.trialId===trialId)||e.attempts.length>=e.maxTrials)throw Error('Trial already reserved or budget exhausted; no automatic replay');if(e.attempts.some(a=>!e.runs.some(r=>r.trialId===a.trialId)))throw Error('Unsettled trial reservation; inspect before further execution');const attempt={trialId,attemptId:crypto.randomUUID(),reservedAt:new Date().toISOString()};e.attempts.push(attempt);return attempt;});
+  }
+  evaluationSummary(id) { const e=this.read().experiments[id];if(!e)throw Error('Unknown experiment');return summarizeEvaluation(e,this.root); }
   experimentResult(id,record) {
-    return this.transaction('experiment.result',state=>{const e=state.experiments[id];if(!e||e.status!=='candidate'||e.runs.length>=e.maxTrials)throw Error('Experiment unavailable/budget exhausted');if(!record.caseId||!record.candidateHash||!record.artifact||!['development','selection','report'].includes(record.split)||typeof record.correct!=='boolean')throw Error('Structured experiment evidence required');e.runs.push(safeData(record));return e;});
+    return this.transaction('experiment.result',state=>{const e=state.experiments[id];if(!e||e.status!=='candidate'||e.runs.length>=e.maxTrials)throw Error('Experiment unavailable/budget exhausted');if(e.evaluation){readEvaluationReceipt(e,record,this.root);if(e.runs.some(r=>r.trialId===record.trialId))throw Error('Duplicate trial result');}else if(!record.caseId||!record.candidateHash||!record.artifact||!['development','selection','report'].includes(record.split)||typeof record.correct!=='boolean')throw Error('Structured experiment evidence required');e.runs.push(safeData(record));return e;});
   }
   reviewExperiment(id,decision) {
     return this.transaction('experiment.review',state=>{const e=state.experiments[id];if(!e||!['adopt','reject'].includes(decision.action)||!decision.reviewer||!decision.reason)throw Error('Explicit reviewer and decision required');
-      if(decision.action==='adopt'&&(!e.runs.some(r=>r.split==='report')||e.runs.some(r=>r.split==='report'&&(!r.correct||r.boundaryFailure))||!decision.rollback))throw Error('Independent final results and rollback required');
+      if(decision.action==='adopt'){const summary=summarizeEvaluation(e,this.root);if(!summary.eligible||!decision.rollback)throw Error('Independent final results and rollback required: '+summary.reasons.join('; '));e.summary=summary;}
       e.status=decision.action==='adopt'?'reviewed-for-adoption':'rejected';e.decision=safeData(decision);return e;
     });
   }

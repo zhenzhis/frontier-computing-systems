@@ -1,6 +1,6 @@
 {
   "name": "frontier-computing-systems",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent systems, harnesses and evaluation research; versioned, reversible Pi workflow implementation.",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "audit": "node scripts/audit-public.mjs",
     "verify": "npm run audit && node scripts/verify-links.mjs && npm test && node scripts/verify-manifest.mjs",
     "verify:sdk": "node scripts/verify-sdk.mjs",
+    "demo:evaluation": "node scripts/evaluation-demo.mjs",
     "backup": "node scripts/backup.mjs",
     "release:plan": "node scripts/release.mjs"
   },
