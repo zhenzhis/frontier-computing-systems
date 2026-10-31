@@ -27,4 +27,4 @@ that new capabilities or experiments are already deployed.
 
 Intent-based model routing, per-turn classifier effort and Laya/Jev runtime adoption.
 Research remains available; adoption requires a new decision and current evidence.
-No self-updater, automatic publishing, automatic PR merging or continuous feedback loop is enabled.
+Installation enables no self-updater, automatic publishing, automatic PR merging or continuous feedback loop. An explicitly configured [Super-agent controller](docs/superagent.md) can perform authorized autonomous development and publication with fixed model roles, isolated candidates and acceptance gates.

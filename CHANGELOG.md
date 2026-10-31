@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-31
+
+- Integrate DeepSeek's pinned MIT domain core with native durable SQLite repositories, immutable events, subscriptions, mandates, assignment recovery and transactional effects.
+- Add an explicitly activated autonomous controller, file-scoped Pi workers, a local attention panel, linked evidence retrieval, frozen regression checks, fresh automated review and separately authorized exact-commit GitHub publication/merge.
+- Add an official DSH Source adapter, isolated-checkout handoff and a loopback/stdio exact-model bridge that keeps upstream credentials in the existing authentication channel.
+- Preserve legacy state paths and runtime identifiers. Installation starts no worker; intent-based model selection remains deferred. Fixture and SDK checks do not establish model productivity or human preference improvements.
+
 ## 0.2.0 — 2026-10-17
 
 - Add evaluation v2 with frozen source/configuration/verifier/task identities, paired trial manifests, durable reservations, artifact revalidation and separate process/task/validity outcomes.

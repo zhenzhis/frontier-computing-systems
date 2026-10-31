@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "47413bc0fbb11f21cf7dc32cf72ea2a730e6bef1a7adff2a1596de87fbde1c75"
+      "sha256": "eaf80e027c1853e9bc1147294d01e19cccb8e187093edb9fa605e765e854dbcb"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -30,7 +30,7 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "d6483b49c9c71e3475889284d39eefa5f498ce55079184d1f43418c701619942"
+      "sha256": "7c63c594e6683535822214bccc64c92f47d3ae5320ab47e834658f9c5a3c48ee"
     },
     {
       "path": "docs/decisions/0001-public-project.md",
@@ -69,12 +69,36 @@
       "sha256": "4eec1c088e9992a905683e69f37ee7b4dd8d93f0c56f4f8dd7a3e9a13f42367e"
     },
     {
+      "path": "docs/superagent.md",
+      "sha256": "e8279770aaed466fe9fbbe7265576d4a7d9b39536603f72a3eb85748784a9400"
+    },
+    {
       "path": "docs/tasks/bootstrap.md",
       "sha256": "333473bc40c787acb8aaaed0c8d0c18004bef4e487581e142085db978dcc8880"
     },
     {
       "path": "examples/permission-config.json",
       "sha256": "997369470aaebbeebf52f337c08f06af3d221fa7a504f5fa8295de56ca2d64eb"
+    },
+    {
+      "path": "integrations/dsh-fcs-source/cordis.patch.yml",
+      "sha256": "a679d8ffbcac3df1a39de6842c0e831cdf7976aba238dba2001af6da17908c28"
+    },
+    {
+      "path": "integrations/dsh-fcs-source/index.mjs",
+      "sha256": "e4618cb2b6352e0ad6fb1320a6ca06f5f3dfe50f4c82e70ddc66892521278c5f"
+    },
+    {
+      "path": "integrations/dsh-fcs-source/package.json",
+      "sha256": "acfd1812b44d967bbef299c1d4f4df978699c92609bafdb02bbeeb405790abf9"
+    },
+    {
+      "path": "integrations/dsh-fcs-source/paths.mjs",
+      "sha256": "c095749c92f026dd2ae33829f79ad7ed3f5a1d3e71630380f198fba0110349e1"
+    },
+    {
+      "path": "integrations/dsh-fcs-source/prepare.mjs",
+      "sha256": "3093e61ae890d200d0486e41ca690cca96a812948d899380915acc86b3ddb85e"
     },
     {
       "path": "LICENSE",
@@ -99,6 +123,10 @@
     {
       "path": "managed/extensions/workflow-runtime/index.ts",
       "sha256": "4ca625067632711ace2fb19151a68ba4188d4740d09bcda635b470d98b1db865"
+    },
+    {
+      "path": "managed/extensions/workflow-superagent/index.ts",
+      "sha256": "e1806159936c6526a3cfc67e2e959d0752db52756bc953f61ed98f592bd37e4c"
     },
     {
       "path": "managed/prompts/workflow-dev.md",
@@ -138,15 +166,15 @@
     },
     {
       "path": "NOTICE",
-      "sha256": "0a6239ee164cc19d240c8fbb3c653a51f2f49d38a72d3dbe00b0749543483d2c"
+      "sha256": "19e742d6ac7fb1f22a7e04f864c4658d56f28824104c9adb6bd9649f31476910"
     },
     {
       "path": "package-lock.json",
-      "sha256": "31b1d371734ddcc2104950a4b3e51375a783b2fb7e0d496638e65ee8946226fb"
+      "sha256": "a3256b9666f00be7fc961a7d5711f58c6c3a8d841e09ddf0c2c199b76ef1a77b"
     },
     {
       "path": "package.json",
-      "sha256": "1f00411669fe7ad81bfbe6fbbfbefb973b580e96d91451676bea4f56c2d53570"
+      "sha256": "6338d868a125118344b8e05b78d91b481946a8d80b91b1026ceffa6b4692663e"
     },
     {
       "path": "README.en.md",
@@ -154,7 +182,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "656b1705555db1bb8ecb1c9da9442a6be59fb79c5d00b2c94250d08ef78d3665"
+      "sha256": "9043cf866bfb3a86c306ee85546a009f66a18aeed3ae85d1c04c538ff112b77a"
     },
     {
       "path": "RESEARCH.md",
@@ -162,7 +190,15 @@
     },
     {
       "path": "ROADMAP.md",
-      "sha256": "a696ab07fcf7a7c0d586f50f95741108c106c654abaac533430afdfa2c3eaab4"
+      "sha256": "142e6b1a7774cda4d808f1c031b6bd94f076153bc3dafb4c9581159d39997efc"
+    },
+    {
+      "path": "runtime/autopilot.mjs",
+      "sha256": "46c88280e57d8bf0afbf6db38924aa898ec3c848bdfae690a08e0b13ca5b8f11"
+    },
+    {
+      "path": "runtime/autopilot.test.mjs",
+      "sha256": "514ca74524a727d8e2ab455832c56f2387dfcbef1fbb5dec6cfc7b5f00839cb7"
     },
     {
       "path": "runtime/cli.mjs",
@@ -175,6 +211,14 @@
     {
       "path": "runtime/control.test.mjs",
       "sha256": "2510a0c7c19384b6d28ec100ea31b51dd067b52ee8521e51ae8affebb4bef7b3"
+    },
+    {
+      "path": "runtime/dsh-executor.mjs",
+      "sha256": "8baa10d22d884b9c38ac2a0a8ba641be847b8a2bd305d153f5a95ab089cae838"
+    },
+    {
+      "path": "runtime/dsh-executor.test.mjs",
+      "sha256": "f77de1dc5c9cbfa10a3ea8bef41c3ae87c5b6f31d6e53e1a142493cfb6389eb0"
     },
     {
       "path": "runtime/evaluate.mjs",
@@ -201,8 +245,36 @@
       "sha256": "879f6acfe72aadbb477a55fb77abcaf7242eb6acc80edb74aaf8f133ad35966d"
     },
     {
+      "path": "runtime/model-gateway.mjs",
+      "sha256": "d16b8c86e260d0cfc57fb3efb0799eea86231ce5f6a093b735b6cec84907457c"
+    },
+    {
       "path": "runtime/README.md",
-      "sha256": "cc2d93b0bffc9f91a08e9caa0ded7008b94d4ebcd965b7d8f96673e205b5b109"
+      "sha256": "0858806b15b986e99853e619b6f71a280326d0d357c697c7826f52964e57c036"
+    },
+    {
+      "path": "runtime/superagent-cli.mjs",
+      "sha256": "c7779dad808406d667f1e86d3e65ca4a1fbd2fafe4454636d6e769b7474520d4"
+    },
+    {
+      "path": "runtime/superagent-model.mjs",
+      "sha256": "814a522a54e97de7f7a091fd91f255539a1c25f91a36f3f6d413347d9bdf57aa"
+    },
+    {
+      "path": "runtime/superagent-panel.html",
+      "sha256": "567d13043476119489fcb7947a89e7091fc403d1c62105384e419b58eca9f1b1"
+    },
+    {
+      "path": "runtime/superagent-service.mjs",
+      "sha256": "26a05656ff67eb8bbb0cd3b053e08b7476511a1a190b46e90191adbe76ae04c4"
+    },
+    {
+      "path": "runtime/superagent.mjs",
+      "sha256": "31c67b4f0f5018e982397a4d7c35eb8592d0a7874ed7cd86ad44805f176d1d86"
+    },
+    {
+      "path": "runtime/superagent.test.mjs",
+      "sha256": "cf507fc73445196822f6e58a7ba650cc1cc0ceeda7c25b3dffa07c6acc0dc4e2"
     },
     {
       "path": "runtime/worker-policy.mjs",
@@ -214,11 +286,15 @@
     },
     {
       "path": "scripts/audit-public.mjs",
-      "sha256": "a7b9c83fbbc352cf957e939a2d29248db6e6e993c72bafe0a5bec70ded2ee3b5"
+      "sha256": "2a053e817e50d257682ea9946b6f0e742a9f5cbfb6b649a74388a4c8a09ebb44"
     },
     {
       "path": "scripts/backup.mjs",
       "sha256": "a608b1a0d9e5a69ec421f4cafb03ae555731f3646158afc5bfc3492be7b193d8"
+    },
+    {
+      "path": "scripts/deploy-superagent.mjs",
+      "sha256": "79ded41ddefa3569b98de80853817dd10c1eee14e1e9645d4c74a824d59c845f"
     },
     {
       "path": "scripts/evaluation-demo.mjs",
@@ -230,15 +306,15 @@
     },
     {
       "path": "scripts/verify-links.mjs",
-      "sha256": "df23315282961145a6fcf65699ffa490b9cad1f040b0206ef38fb3b12fe67a5a"
+      "sha256": "ae1fe43f4e14bf6c93a00845a8560e22e68b2a3065720b56296ad34ebdd9650b"
     },
     {
       "path": "scripts/verify-manifest.mjs",
-      "sha256": "618c104d043859154fe3e30aaa6babb458303e6c3f8fec115d635eca55eb42d1"
+      "sha256": "48c76a9fdd199ba0e29bcd309a0bcee066215b44984a5341691aa929191badde"
     },
     {
       "path": "scripts/verify-sdk.mjs",
-      "sha256": "14151639542604ef10fdb68030d2dc623a68cf62cda6fb84cdf5c4b0f943324e"
+      "sha256": "75369f730625209c87203014d54caf877a3b230756f2915645fcf60514488179"
     },
     {
       "path": "SECURITY.md",
@@ -279,6 +355,82 @@
     {
       "path": "tests/windows-parser.test.mjs",
       "sha256": "2f3eea7c05f43d50cf406e536c2532d205a9ef3c820b23d59f88140721fa3283"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/index.d.mts",
+      "sha256": "efdf2f4640fab6a5e91760c39d4bf867d8ae6cf0ac2c8909e6aedac96757d3a2"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/index.mjs",
+      "sha256": "4e8e2b5c240e7b0f0f1412f5d00044a9ff942f5e5dd7ffa169b3a7459195c694"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/LICENSE",
+      "sha256": "6d66f91815b720e18cfb2b3552043a0359236aec9a1a6917787900546f6ce550"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/README.md",
+      "sha256": "40598950bf74cc46ea4a27dc6b5f5c58da32bfc50bc8af7756696a3f637e8743"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/assignments.ts",
+      "sha256": "6acf4b858b35d95c875680e39b1e3c41557bbe6d39f65031bb26927289327065"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/engine.ts",
+      "sha256": "bd9a4caff834859877d1a08ccddebc990d0e1ca568674b80f9d59ce5adcac827"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/errors.ts",
+      "sha256": "aa7532a2d1f8c443608683ef1231bf3d81b842f67a87d9b77742b5c76d515009"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/evals.ts",
+      "sha256": "38916de24ec6e1a27118dd5d7a7efa67bf7a2dfdbab26fb59d377516269e2fc8"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/ids.ts",
+      "sha256": "bc4bc6fd43ea1377087ff2815706c57f0200666aeb4a7711a40489c377f141ab"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/index.ts",
+      "sha256": "a5a1cf43f02eafaf520a5bfaf5e76b71ba521d04ee648cfcf12b3843cc474a3e"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/intake.ts",
+      "sha256": "323aadefea69436ba23ed2de3bdbaad673d61915be9e239f3233ecf551a74179"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/memory.ts",
+      "sha256": "36cefca987a4e533369a414e52e3fb4754945ae942bb021f8e5cf23c186cf536"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/model.ts",
+      "sha256": "982155fe6a03c887a7ac4475c6d1592d12aa23c5fe3698403c93bbfd6469d44a"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/part.ts",
+      "sha256": "437c4f4bcc05e836c056cdb45bbf451e55242d62b602b489f4df902be112e73e"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/ports.ts",
+      "sha256": "0b44f1cd716d64776b0e3ea74a158cf0effd92e763b1b13c7705e766e9225a43"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/reasons.ts",
+      "sha256": "dc29e0c3c52e4ffd6e8f27a618cbe704a83fdbd9c5a1b99a1e0c4184d5c33af4"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/replies.ts",
+      "sha256": "5a8821a1b9d951d2255709543e0be762c6d3204bca07a77ff17c7bfe82ba66f4"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/stage.ts",
+      "sha256": "b935012a654d2a68ca20cb27909ddc8dceafb704b56a16a23a08036a546141df"
+    },
+    {
+      "path": "vendor/dsh-superagent-core/source/tickets.ts",
+      "sha256": "1d9f964ad34b54cbb0403bde16af58851e5e80111177ce73a27b6034e9af940e"
     }
   ]
 }
