@@ -13,8 +13,9 @@ export async function runDshWorker({queue,allowedWorkspaceRoot,nativeTicketId,pr
    const result=JSON.parse(fs.readFileSync(output,'utf8'));if(result.requestId!==id||result.nativeTicketId!==nativeTicketId||result.base!==base)throw Error('DSH result does not match the immutable assignment');if(result.completed!==true)throw Error(`DSH worker did not complete: ${result.summary}`);
    const source=fs.realpathSync(result.directory),root=fs.realpathSync(allowedWorkspaceRoot);if(!source.toLowerCase().startsWith(root.toLowerCase()+path.sep))throw Error('DSH workspace is outside the configured execution root');
    const assignment=JSON.parse(fs.readFileSync(path.join(source,'.local','fcs-assignment.json'),'utf8'));if(assignment.requestId!==id||assignment.base!==base||assignment.nativeTicketId!==nativeTicketId)throw Error('DSH workspace belongs to another assignment');
-   if(!Array.isArray(result.changed)||result.changed.some(f=>!plan.files.includes(f)))throw Error('DSH worker changed unassigned files');
-   for(const relative of result.changed){const from=projectPath(source,relative),to=projectPath(fs.realpathSync(project),relative);if(fs.existsSync(from)){fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to)}else if(fs.existsSync(to))fs.unlinkSync(to)}
+   if(!Array.isArray(result.changed)||result.changed.some(f=>f!=='release-manifest.json'&&!plan.files.includes(f)))throw Error('DSH worker changed unassigned files');
+   // The supervisor regenerates the release manifest from actual source; never adopt a worker's hashes.
+   for(const relative of result.changed.filter(f=>f!=='release-manifest.json')){const from=projectPath(source,relative),to=projectPath(fs.realpathSync(project),relative);if(fs.existsSync(from)){fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to)}else if(fs.existsSync(to))fs.unlinkSync(to)}
    const archive=path.join(queue,'archive',id);fs.mkdirSync(archive,{recursive:true});for(const entry of fs.readdirSync(queue).filter(f=>f.startsWith(id+'.')))fs.renameSync(path.join(queue,entry),path.join(archive,entry));
    return{summary:result.summary,completed:true,executor:'dsh',dshTicketId:result.ticketId,requestId:id,base};
   }onProgress({executor:'dsh',requestId:id});await new Promise(r=>setTimeout(r,2000))}

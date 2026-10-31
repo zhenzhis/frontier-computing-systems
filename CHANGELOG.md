@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-10-31
+
+- Keep repository discovery idempotent within its revision/time bucket so repeated ticks preserve immutable events and continue draining effects.
+- Deliver assigned DSH source changes while discarding worker-generated release hashes; the supervisor remains responsible for regenerating the manifest.
+
 ## Unreleased
 
 ## 0.3.0 — 2026-10-31
