@@ -45,6 +45,6 @@ GitHub 的重定向行为与例外以 [官方更名说明](https://docs.github.c
 
 ## 发布入口
 
-`node scripts/release.mjs --backup-dir <目录>` 只展示计划；`--apply` 运行验证、备份、建立版本 tag 并再次备份。只有同时给出 `--push` 才推送 tag，且要求候选已推送到远程 main、该精确提交的最新 Verify CI 已成功。这一步需要已认证的 GitHub CLI；应先完成候选备份、推送和 CI，再运行公开 tag 发布。已经存在的 tag 拒绝覆盖。这个入口不部署活动配置、不创建 npm 发布、不合并 PR、不启动自动循环。
+`node scripts/release.mjs --backup-dir <目录>` 只展示计划；`--apply` 运行验证、备份、建立版本 tag 并再次备份。发布门禁执行的测试集从 `package.json` 的 `scripts.test` 派生，与 `npm test` 完全一致（`runtime/*.test.mjs` 与 `tests/*.test.mjs`）；遇到其他测试脚本形式（新增目录 glob、显式文件、其他 runner 等）直接报错停止，不会静默少跑测试。`node scripts/release.mjs` 的预览路径只读取 `package.json`，不调用 git 或 gh，因此在非 git 检出中也能运行且不产生任何变更。只有同时给出 `--push` 才推送 tag，且要求候选已推送到远程 main、该精确提交的最新 Verify CI 已成功。这一步需要已认证的 GitHub CLI；应先完成候选备份、推送和 CI，再运行公开 tag 发布。已经存在的 tag 拒绝覆盖。这个入口不部署活动配置、不创建 npm 发布、不合并 PR、不启动自动循环。
 
 首次公开或协议变更需要实际恢复演练。依赖升级固定版本与 lockfile；不能凭上游最新版标签宣称性能提升。对影响模型或上下文的配置采用有基线、单变量、独立最终用例的实验，候选失败可以保留研究记录但不默认上线。
