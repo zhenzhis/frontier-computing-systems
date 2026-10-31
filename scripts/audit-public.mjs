@@ -9,7 +9,11 @@ export const rules=[
  ['github-fine-grained',/\bgithub_pat_[A-Za-z0-9_]{20,}/],
  ['private-key',/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
  ['oauth-value',/"(?:access_token|refresh_token)"\s*:\s*"(?!<|REDACTED|EXAMPLE)[A-Za-z0-9_./+-]{16,}"/i],
- ['personal-home',/[A-Z]:[\\/]Users[\\/](?!<|\*|user[\\/]|example[\\/])[a-z0-9_-]+[\\/]/i],
+ // Both the drive-letter form and the POSIX absolute form (macOS `Users`, Linux/WSL `home`)
+ // end at a separator after the account segment, exactly like the Windows branch always did.
+ // The lookbehind keeps the rule off URL bodies and relative segments, and the placeholder
+ // allowance mirrors the other rules so documented examples stay publishable.
+ ['personal-home',/(?:[A-Z]:[\\/]Users|(?<![\w.:-])\/(?:Users|home))[\\/](?!<|\*|\$|user[\\/]|example[\\/])[a-z0-9._-]+[\\/]/i],
 ];
 const forbidden=/(?:^|\/)(?:auth|mcp-auth|models|models-store|settings|trust)\.json$|(?:^|\/)(?:sessions|state|backups|\.private|\.local)\//i;
 export function inspect(name,text){return [...(forbidden.test(name)?['private-file']:[]),...rules.filter(([,pattern])=>pattern.test(text)).map(([name])=>name)];}
