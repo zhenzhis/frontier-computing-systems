@@ -78,6 +78,7 @@ export class Autopilot {
  async role(role,project,prompt,options={}){return this.runRole({project,agentDir:this.config.agentDir,provider:this.config.provider,model:this.config.model,role,prompt,stateDir:this.store.root,
   onUsage:usage=>this.record('usage',{role,usage,requestedModel:this.config.model}),onProgress:p=>this.record('progress',{role,...p}),contextRead:id=>this.store.reference(id),signal:AbortSignal.timeout((this.config.cycleMinutes??30)*60000),...options})}
  discover(){const c=this.store.config();if(c.paused||c.mode!=='auto'||this.running.size||this.store.repo.tickets.open().length)return;const revision=git(this.store.project,'rev-parse','HEAD');const id=`discovery-${revision.slice(0,12)}-${Math.floor(Date.now()/(this.config.discoverySeconds??900)/1000)}`;
+  if(this.store.repo.triggers.get(id))return;
   this.store.receive({id,source:'repository',threads:[{source:'repository',id}],actor:{source:'repository',id:'scanner'},human:false,at:new Date().toISOString(),text:'Inspect the current repository, roadmap and recorded failures. Propose one reproducible, useful, bounded improvement, or ignore when evidence is insufficient. Do not manufacture activity.',meta:{revision}});}
  async assess(effect){const {triggers}=effect.value,trigger=triggers[0];this.store.engine.candidateDelivered(effect.id);
   this.assessController=new AbortController();try{
