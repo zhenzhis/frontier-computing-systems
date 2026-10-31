@@ -1,0 +1,3 @@
+- insert:
+    - id: fcs-source
+      name: '@fcs/dsh-source'

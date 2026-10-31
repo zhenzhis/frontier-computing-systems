@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),failures=[];
+const rootIndex=process.argv.indexOf('--root');
+const root=rootIndex>=0?fs.realpathSync(process.argv[rootIndex+1]):path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),failures=[];
 let documents=0;
 function walk(dir){for(const item of fs.readdirSync(dir,{withFileTypes:true})){
  if(['node_modules','.git','.private','.local'].includes(item.name))continue;

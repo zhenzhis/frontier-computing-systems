@@ -19,6 +19,7 @@ The current implementation is **FCS Pi Workflow**: a versioned, recoverable work
 - **Review before adoption.** Candidate lessons, feedback triage, and single-variable experiments with separate development, selection, and held-out evaluation sets.
 - **Keep the interface light.** Read-only status and context reminders, on-demand resources, and an optional Windows permission adapter.
 - **Verify and recover.** Pinned dependencies, integrity manifests, public-content checks, source backups, and release previews.
+- **Opt into autonomous iteration.** Native Pi and official DSH executors share durable tasks, scoped ownership, linked evidence and automated acceptance/publication gates. See [Super-agent integration](docs/superagent.md).
 
 Manual model-role selection remains the baseline; [intent-based routing is deferred](docs/research/intent-routing.md). Installation starts no workers, background loops, or model requests.
 

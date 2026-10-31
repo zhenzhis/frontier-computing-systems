@@ -10,3 +10,9 @@ versioned dependencies. Their original licenses remain in the installed packages
 This project does not vendor their implementation or claim their benchmark scores.
 External research papers, articles and repositories retain their own rights;
 research notes link to primary sources rather than redistributing full articles.
+
+DeepSeek Super-agent domain core (MIT), DeepSeek Harness Team.
+Source: https://github.com/deepseek-ai/dsh-superagent-prototype
+Pinned revision: 6337fc823ce20251c8de8085948165c81aaa701e
+Original core source and generated portable bundle: vendor/dsh-superagent-core/
+License: vendor/dsh-superagent-core/LICENSE

@@ -1,0 +1,10 @@
+{
+  "name": "@fcs/dsh-source",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "license": "MIT",
+  "dependencies": {"zod": "4.4.3"},
+  "dsh": {"manifestVersion": 1, "bundle": {"patch": "cordis.patch.yml"}}
+}

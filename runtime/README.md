@@ -58,3 +58,6 @@ writer.lock 不会自动抢占；确认所属进程已退出后 `unlock-dead <pi
 `npm run verify` 检查实际任务控制器、反馈、发布审计、备份恢复与 Windows 命令规范化；`npm run verify:sdk` 使用 Pi 1.2.0 的真实 SDK 在隔离配置中加载资源并调用只读状态命令，不发起模型请求。
 
 公开版本不包含私人 WF7 的部署回执、Pi Durable 故障实验或覆盖活动配置的回退脚本。恢复源码与版本流程见 [维护文档](../docs/maintenance.md)；活动配置恢复需要核对自己的私有备份，不能用源码 tag 推断账号和部署也恢复成功。
+## Super-agent
+
+原生 Pi 与独立官方 DSH 执行路径、授权、自动迭代、暂停、恢复与部署边界见 [Super-agent integration](../docs/superagent.md)。读取状态与安装扩展不会自动启动服务。

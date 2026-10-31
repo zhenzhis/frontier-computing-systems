@@ -27,5 +27,5 @@ export function audit(rootDir=root,{history=false}={}){
  return {passed:failures.length===0,files:files.length,commits,failures,note:'Pattern scan reports locations only; it is not proof that every secret or personal detail is detectable.'};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- const report=audit(root,{history:process.argv.includes('--history')});console.log(JSON.stringify(report,null,2));if(!report.passed)process.exitCode=1;
+ const rootIndex=process.argv.indexOf('--root');const report=audit(rootIndex>=0?fs.realpathSync(process.argv[rootIndex+1]):root,{history:process.argv.includes('--history')});console.log(JSON.stringify(report,null,2));if(!report.passed)process.exitCode=1;
 }
