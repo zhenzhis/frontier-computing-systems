@@ -194,7 +194,7 @@
     },
     {
       "path": "runtime/autopilot.mjs",
-      "sha256": "46c88280e57d8bf0afbf6db38924aa898ec3c848bdfae690a08e0b13ca5b8f11"
+      "sha256": "4846918a373694795fb0adbef4df253b37d3ee2ee2705767dc0d49869b8aebfb"
     },
     {
       "path": "runtime/autopilot.test.mjs",
@@ -294,7 +294,7 @@
     },
     {
       "path": "scripts/deploy-superagent.mjs",
-      "sha256": "79ded41ddefa3569b98de80853817dd10c1eee14e1e9645d4c74a824d59c845f"
+      "sha256": "a46b5563df43fd9140fdb0c9405f843f9c36b065c38dc80618ecc31a123f2028"
     },
     {
       "path": "scripts/evaluation-demo.mjs",

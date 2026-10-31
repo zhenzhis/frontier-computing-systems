@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {command} from '../runtime/autopilot.mjs';
+import {command,npmCli} from '../runtime/autopilot.mjs';
 
 const args=process.argv.slice(2),arg=name=>args[args.indexOf(name)+1];
 if(!args.includes('--apply')||!args.includes('--config')||!args.includes('--candidate')||!args.includes('--artifacts'))throw Error('Explicit --config, --candidate, --artifacts and --apply required');
@@ -15,7 +15,7 @@ const identity=hash(path.join(candidate,'release-manifest.json')),destination=pa
 if(destination.toLowerCase().startsWith(candidate.toLowerCase()+path.sep))throw Error('Deployment must be outside the candidate');
 fs.mkdirSync(artifacts,{recursive:true});
 if(!fs.existsSync(destination)){const stage=destination+'.'+crypto.randomUUID()+'.tmp';fs.cpSync(candidate,stage,{recursive:true,filter:file=>!path.relative(candidate,file).split(path.sep).some(x=>['.git','node_modules','.private','.local','state','sessions','backups'].includes(x))});fs.renameSync(stage,destination);}
-const log=path.join(artifacts,'local-deployment.log'),npm=path.join(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
+const log=path.join(artifacts,'local-deployment.log'),npm=npmCli();
 for(const cmd of [[npm,'ci','--ignore-scripts','--no-audit','--no-fund'],[path.join(destination,'scripts/verify-manifest.mjs')],[path.join(destination,'scripts/verify-sdk.mjs')]]){
  const r=await command(process.execPath,cmd,{cwd:destination,log});if(!r.passed)throw Error('Installed source/SDK verification failed; active extension remains unchanged');
 }
