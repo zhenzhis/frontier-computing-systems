@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.3.4",
+  "version": "0.3.5",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "88867064cbdb63b567003d06903c778a6557a1c93c583e60fb98bd7d32b1d738"
+      "sha256": "693ee7ceccf9b3e05a330e4c18a0e7a7dde0a357ec33560982ea049831441b22"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -170,11 +170,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "48c99948c6d0402f256fdc509afd0cc0e7c5d06c315c0d1cbc3e6f353233181b"
+      "sha256": "698238e44450decc6fc59c8bb905c785babb15680fb06fcfeb1b62ae201e4bba"
     },
     {
       "path": "package.json",
-      "sha256": "f76de1c1b2709c244c7b7b9bad5eb87872e4ad828bcfc3e8ddf299adb1ac154d"
+      "sha256": "77f3d9934b6aa9d9da348b8a6d8b4665b0b401ca32cdaf684aa4fdd5d16bb4fc"
     },
     {
       "path": "README.en.md",
@@ -286,7 +286,7 @@
     },
     {
       "path": "scripts/audit-public.mjs",
-      "sha256": "2a053e817e50d257682ea9946b6f0e742a9f5cbfb6b649a74388a4c8a09ebb44"
+      "sha256": "f48ce5772df86e46f7b8be34411ff486d19c18de82853d043f769224f82ea3f0"
     },
     {
       "path": "scripts/backup.mjs",
@@ -335,6 +335,10 @@
     {
       "path": "templates/研究记录.md",
       "sha256": "481e0e261b5068cd73707b155e0e6ef809f2a9f56ad3d9bcd50acad1afabbf02"
+    },
+    {
+      "path": "tests/audit-public.test.mjs",
+      "sha256": "71a238a2c049270f7326fb6ff4d292a9fddbe74975c2214888d513bc7ed04c16"
     },
     {
       "path": "tests/backup.test.mjs",
