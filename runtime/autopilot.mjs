@@ -27,6 +27,16 @@ async function npm(cwd,args,options){return command(process.execPath,[npmCli(),.
 /** Install the active checkout's committed lockfile before any release-time check; scripts stay disabled and development dependencies are retained. */
 export async function installMergedDependencies(project,{log,signal,run=npm}={}){const result=await run(project,['ci','--ignore-scripts','--include=dev','--no-audit','--no-fund'],{log,signal});const tail=(result.output??'').slice(-4000);if(!result.passed)return{passed:false,stage:'install',log,tail,code:result.code};const declared=Object.keys(JSON.parse(fs.readFileSync(path.join(project,'package.json'),'utf8')).devDependencies??{});const missing=declared.filter(name=>!fs.existsSync(path.join(project,'node_modules',...name.split('/'),'package.json')));if(missing.length)return{passed:false,stage:'dev-dependencies',log,tail,missing};return{passed:true,stage:'installed',log,tail}}
 function sourceCopy(from,to){fs.cpSync(from,to,{recursive:true,filter:file=>!path.relative(from,file).split(path.sep).some(x=>['.git','node_modules','.private','.local','state','sessions','backups'].includes(x))})}
+/** The controller alone owns version and release-record files; model instructions and the pre-verification gate use this one statement so the rule cannot drift between them. */
+export const VERSION_OWNERSHIP='Version changes are owned by the controller: the package.json version, the package-lock.json version fields, CHANGELOG.md release entries and release-manifest.json belong to the controller and are not worker-writable candidate edits.';
+/** Refuse a candidate whose controller-owned version fields drift from its base commit, before independent verification is spent on it. */
+export function assertVersionOwnership(project){
+ const read=load=>{try{return load()}catch{return null}};
+ const fields=file=>json=>file==='package.json'?[json?.version]:[json?.version,json?.packages?.['']?.version];
+ for(const file of ['package.json','package-lock.json']){const select=fields(file);
+  const base=read(()=>select(JSON.parse(git(project,'show',`HEAD:${file}`)))),now=read(()=>select(JSON.parse(fs.readFileSync(path.join(project,file),'utf8'))));
+  if(base&&now&&base.some((value,index)=>value!==now[index]))throw Error('Version changes are owned by the controller')}
+}
 function versionCandidate(project,plan,worker){
  const file=path.join(project,'package.json'),pkg=JSON.parse(fs.readFileSync(file,'utf8'));
  const previous=JSON.parse(git(project,'show','HEAD:package.json')).version;
@@ -155,15 +165,17 @@ export class Autopilot {
    const validated=this.store.get('candidate',ticket.id);if(validated){await this.adopt(validated,controller.signal);return}
    const base=git(this.store.project,'rev-parse','HEAD'),branch=`${this.config.branchPrefix??'fcs-auto/'}${ticket.id.slice(-20)}-${Date.now().toString(36)}`;
    const worktree=path.join(artifacts,'candidate');git(this.store.project,'worktree','add','-b',branch,worktree,base);
-   const plan=this.store.get('plan',ticket.id)??checkedPlan(await this.role('planner',worktree,`Plan the authorized task. Context: ${JSON.stringify(this.store.context(ticket.id))}. Return fcs_report {title,problem,acceptance,files}.`,{signal:controller.signal}),worktree);
+   const plan=this.store.get('plan',ticket.id)??checkedPlan(await this.role('planner',worktree,`Plan the authorized task. Context: ${JSON.stringify(this.store.context(ticket.id))}. ${VERSION_OWNERSHIP} Do not assign controller-owned release files as worker-writable. Return fcs_report {title,problem,acceptance,files}.`,{signal:controller.signal}),worktree);
    this.store.atomic(()=>this.store.put('execution',ticket.id,{worktree,branch,base,artifacts,plan,status:'working'}));
    let worker,verification;
    for(let round=0;round<3;round++){
-    const workerPrompt=`Implement this authorized plan: ${JSON.stringify(plan)}. Exact writable files: ${JSON.stringify(plan.files)}. ${round?`Previous independent checks failed: ${JSON.stringify(verification)}. Repair the same scope; failure evidence: ${JSON.stringify(this.store.get('evidence',`verification/${ticket.id}`))}.`:''} Read AGENTS.md and relevant evidence first. Tests and publication are performed by the controller. Return fcs_report {summary,completed,remaining,handback?:[trigger ids]}.`;
+    const workerPrompt=`Implement this authorized plan: ${JSON.stringify(plan)}. Exact writable files: ${JSON.stringify(plan.files)}. ${round?`Previous independent checks failed: ${JSON.stringify(verification)}. Repair the same scope; failure evidence: ${JSON.stringify(this.store.get('evidence',`verification/${ticket.id}`))}.`:''} ${VERSION_OWNERSHIP} Read AGENTS.md and relevant evidence first. Tests and publication are performed by the controller. Return fcs_report {summary,completed,remaining,handback?:[trigger ids]}.`;
     const useDsh=this.config.dsh&&(this.config.workerEngine==='dsh'||(this.config.workerEngine==='alternate'&&this.store.list('result').length%2===0));
     worker=useDsh?await runDshWorker({...this.config.dsh,nativeTicketId:ticket.id,project:worktree,base,sourceRepository:this.store.project,plan,prompt:workerPrompt,signal:controller.signal,onProgress:p=>this.progress(ticket,item,p)}):await this.role('worker',worktree,workerPrompt,{files:plan.files,signal:controller.signal,onSession:s=>{item.session=s},onProgress:p=>this.progress(ticket,item,p)});
     item.session=null;for(const id of worker.handback??[]){const current=this.store.repo.tickets.get(ticket.id);if(current.inputs.some(input=>input.kind==='trigger'&&input.triggerId===id))try{this.store.engine.handback(ticket.id,id,'Worker found request outside mandate')}catch(error){this.record('failure',{ticketId:ticket.id,handback:id,error:String(error.message)})}else this.record('evidence',{ticketId:ticket.id,unreachedHandback:id})}
     const changed=[...new Set([...git(worktree,'diff','--name-only').split('\n'),...git(worktree,'ls-files','--others','--exclude-standard').split('\n')].filter(Boolean))];if(changed.some(f=>f!=='release-manifest.json'&&!plan.files.includes(f)))throw Error('Candidate changed files outside assigned ownership');if(!changed.filter(f=>f!=='release-manifest.json').length)throw Error('No source change was produced');
+    // Controller-owned version fields are refused here, before any independent check spends budget on a drifting candidate.
+    assertVersionOwnership(worktree);
     verification=await this.verify(this.config.trustedRoot??this.store.project,worktree,path.join(artifacts,`check-${round}`),controller.signal);this.store.atomic(()=>this.store.put('verification',`${ticket.id}/${round}`,verification));
     if(verification.passed)break;
     this.store.atomic(()=>this.store.put('evidence',`verification/${ticket.id}`,{...verification,tail:verification.log&&fs.existsSync(verification.log)?fs.readFileSync(verification.log,'utf8').slice(-14000):''}));
