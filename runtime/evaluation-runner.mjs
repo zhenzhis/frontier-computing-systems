@@ -2,6 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { artifactHash, checkBindings } from './evaluation.mjs';
 
+const OUTPUT_MODIFIED = 'output-modified-during-verification';
+const artifactSnapshot = file => ({
+  sha256: artifactHash(file),
+  regularFile: fs.existsSync(file) && fs.statSync(file).isFile(),
+});
+
 export function runEvaluation(store, request, planFile, runCheck, safeData) {
   const allowed = ['schemaVersion', 'experimentId', 'evaluationDigest'];
   if (Object.keys(request).some(key => !allowed.includes(key))) throw Error('Evaluation v2 commands come only from the registered frozen plan');
@@ -16,18 +22,36 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     if ([trial.outputFile, trial.assessmentFile].some(file => fs.existsSync(file))) throw Error('Trial outputs must be fresh; inspect before execution');
     const attempt = store.beginEvaluation(experiment.id, trial.id);
     const execution = runCheck(trial.command);
+    // Snapshot the candidate artifact before the external verifier starts. The
+    // verifier may only inspect the bytes the task adapter produced; if it (or
+    // anything else) rewrites or replaces outputFile during verification, the
+    // graded result would be based on bytes the verifier itself wrote.
+    const beforeVerification = artifactSnapshot(trial.outputFile);
     // Only the pre-reviewed external verifier may create the assessment. If the
     // task adapter already produced one, that claim is unverified evidence: the
     // verifier is not run (so it cannot overwrite the file) and the trial is
     // invalid instead of being accepted as a graded result.
     const claimedAssessment = fs.existsSync(trial.assessmentFile);
-    const verification = claimedAssessment
+    let verification = claimedAssessment
       ? { outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: 'assessment-pre-exists', detail: 'External verifier not run: assessment existed before verification' }
       : runCheck(trial.verify);
+    const afterVerification = artifactSnapshot(trial.outputFile);
+    const outputChangedDuringVerification = !claimedAssessment
+      && (beforeVerification.sha256 !== afterVerification.sha256 || beforeVerification.regularFile !== afterVerification.regularFile);
+    if (outputChangedDuringVerification) {
+      verification = {
+        ...verification, outcome: 'failed', error: OUTPUT_MODIFIED,
+        detail: `Candidate output changed during external verification (before=${beforeVerification.sha256 ?? 'missing'}, after=${afterVerification.sha256 ?? 'missing'})`,
+        outputBeforeSha256: beforeVerification.sha256, outputAfterSha256: afterVerification.sha256,
+      };
+    }
     let assessment, validity = 'valid', invalidReason = null;
     if (claimedAssessment) {
       validity = 'invalid';
       invalidReason = 'Assessment existed before external verification; verify not run';
+    } else if (outputChangedDuringVerification) {
+      validity = 'invalid';
+      invalidReason = `Candidate output was modified during external verification (before=${beforeVerification.sha256 ?? 'missing'}, after=${afterVerification.sha256 ?? 'missing'}); verifier result not accepted`;
     } else {
       try {
         assessment = JSON.parse(fs.readFileSync(trial.assessmentFile, 'utf8'));
