@@ -198,3 +198,87 @@ test('an undecodable link does not stop the rest of the document from being chec
   {file:repoPath('docs','mixed.md'),link:'missing-good.md'},
  ]);
 });
+
+// Badge-shaped links (README lines 7-9: [![Verify](badge.svg)](workflow-url), plus the
+// Node.js and License badges whose outer targets are package.json and LICENSE) nest one
+// construct inside the text of another. The scanner used before this test matched with
+// the single pattern \[[^\]]*\]\(([^\s)]+)\), which allows no bracket inside the label:
+// it consumed `[![badge](present.png)` and stopped at the inner `)`, so the remaining
+// `](...)` had no `[` left to match and the outer target was never inspected. This
+// fixture therefore exited 0 with failures [] before the fix — a false negative for a
+// whole class of real links, where renaming or moving package.json/LICENSE stayed green.
+// It must now exit 1 and name exactly the outer target, while the inner image that
+// exists is not reported again.
+test('a badge-shaped nested link validates its outer target instead of only the inner image',t=>{
+ const root=fixture(t);
+ place(root,'docs/present.png','');
+ place(root,'docs/badge.md','[![badge](present.png)](missing-outer.md)\n');
+ const report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.deepEqual(Object.keys(report.output).sort(),['documents','failures','passed']);
+ assert.equal(report.output.passed,false);
+ assert.equal(report.output.documents,1);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','badge.md'),link:'missing-outer.md'}]);
+ assert.equal(report.stderr,'');
+});
+
+// Every layer of a nested construct is one target, so each is checked exactly once: a
+// missing image inside a present outer target is still reported (the image check that
+// existed before is kept), and two missing layers give two failures ordered by where
+// their destinations appear in the source.
+test('each nested layer is checked exactly once and keeps the image check',t=>{
+ const root=fixture(t);
+ place(root,'docs/present.md','# Present\n');
+ place(root,'docs/layered.md','[![img](missing.png)](present.md)\n');
+ let report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','layered.md'),link:'missing.png'}]);
+ place(root,'docs/layered.md','[![img](gone.png)](missing-target.md)\n');
+ report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.deepEqual(report.output.failures,[
+  {file:repoPath('docs','layered.md'),link:'gone.png'},
+  {file:repoPath('docs','layered.md'),link:'missing-target.md'},
+ ]);
+});
+
+// Balanced parentheses belong to the destination, and brackets nested in the label do
+// not end it early: `[docs [beta]](x.md)` targets x.md, `[brackets](a(b).md)` targets
+// the real file a(b).md, and a missing parenthesised name is reported with its full
+// raw link rather than a truncated prefix.
+test('nested brackets in link text and balanced parentheses in a destination resolve to the real target',t=>{
+ const root=fixture(t);
+ place(root,'docs/x.md','# X\n');
+ place(root,'docs/a(b).md','# A\n');
+ place(root,'docs/brackets.md',[
+  '[docs [beta]](x.md)',
+  '[brackets](a(b).md)',
+  '[missing-brackets](a(c).md)',
+ ].join('\n'));
+ const report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.equal(report.output.documents,3);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','brackets.md'),link:'a(c).md'}]);
+});
+
+// Unbalanced constructs are documentation as often as mistakes: they must be skipped
+// without a throw, without a stack on stderr, and without swallowing the links that
+// follow them in the same document.
+test('an unterminated label or destination is skipped without a crash and the scan continues',t=>{
+ const root=fixture(t);
+ place(root,'docs/unclosed.md',[
+  '# Unclosed constructs',
+  '[unclosed label without a close',
+  '',
+  '[half](docs/never-closed.md',
+  '[real](missing-real.md)',
+ ].join('\n'));
+ const report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.equal(report.output.documents,1);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','unclosed.md'),link:'missing-real.md'}]);
+ assert.equal(report.stderr,'');
+});

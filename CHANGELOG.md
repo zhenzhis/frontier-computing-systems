@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9 — 2026-11-01
+
+- 修复 frozen-verify-links 失败：上一轮把徽章式嵌套链接的负证据写成了真实可见的 markdown 链接语法（CHANGELOG.md 中 img.svg×2、present.png），冻结门禁把它当真实链接扫描，导致仓库自身 verify-links 退出 1（failures 3 条，documents 34）。本轮只改 CHANGELOG.md：负证据移入围栏代码块，prose 不再含任何 [...]（...） 形状；代码块示例刻意只用真实存在或 external 目标（LICENSE、package.json、README.md、https://example.com/badge.svg），因此无论门禁是否剥离围栏/行内代码都不会再产生失败；负证据与前置说明仍保留在仓库中（prose 明示 fixture 形状与修复前后 0/1 的期望，可执行证据在 tests/verify-links.test.mjs）。scripts/verify-links.mjs 与 tests/verify-links.test.mjs 未再改动，其深度感知扫描（方括号深度定标签结尾、圆括号平衡定目标结尾、每层各校验一次、未闭合不抛错）与 13 个用例保持上一轮已通过的状态（隔离候选 npm test 117 pass / 0 fail，新脚本对仓库自身 documents 34 / failures []）。未增删任何 .md 文件，documents 基线仍为 34；未改 package.json/依赖、未改 release-manifest.json、未启用意图分流、未触碰凭据/Provider/权限/会话。
+
 ## 0.3.8 — 2026-11-01
 
 - 已完成本地候选，未 push / 未建 PR / 未改 release-manifest.json。 完成内容： - scripts/verify-links.mjs：新增锚点收集与片段校验。GitHub 风格 heading slug（小写、空白转 '-'、去标点与强调标记、保留 inline code 与链接文字、重复标题 -1/-2、CJK 保留、冲突避让）；收集显式 id="..." 与 <a name="...">。同文档 #fragment 与跨文档 .md#fragment 均校验，失败为 reason:'missing-anchor'；目标文件不存在仍保持既有 {file,link} 形态；非 .md 目标不校验片段；兼容百分号编码片段。http/https/mailto、围栏/行内代码、undecodable-link、path.relative 原生路径等既有行为不变。 - tests/verify-links.test.mjs：原“片段链接被忽略”用例改写为锚点校验用例（有意行为变更，测试内注释已说明），并新增跨文档片段、slug 归一化（含 CJK/编码）、显式 id/name 锚点用例；保留非 .md 文件不被扫描的断言。 实际验证： - checkout：node scripts/verify-links.mjs 通过，documents 34，failures []；README #getting-started/#documentation 被真实解析；npm run audit 通过；npm test 111 pass / 2 skip / 0 fail；verify-links 测试文件 9/9。 - 精确候选副本用 verify-manifest --write 重建清单后：npm run verify 通过（audit、links、全部测试、manifest 111 files 全绿）；npm run verify:sdk 通过，modelRequests:0。 - README 锚点探针：临时把 “Getting started” 改名后 #getting-started 报 missing-anchor，未改名不报，确认非跳过。 - 现有文档未发现真实断锚，无负证据需要列出。 Remaining：控制器独立校验、按流程重建 release-manifest.json、精确提交 CI 与发布；本地无其他待办。
@@ -35,6 +39,26 @@
 
 ## Unreleased
 
+- 修复发布门禁 scripts/verify-links.mjs 对「徽章式嵌套链接」外层目标的假阴性（工程校验缺陷，不涉及研究结论，也不改变对外协议）。旧实现用单条正则扫描链接，该正则的标签部分不允许嵌套方括号：对「链接文字本身就是一个内联图片」的徽章写法，它先匹配到内层图片并在内层右括号处结束，剩下的那段以右方括号加圆括号开头、前面已经没有左方括号，因此**外层目标完全不被校验**。README 第 7–9 行三个徽章正是这种形状，其外层相对目标 `package.json`、`LICENSE`（以及 Verify 徽章的外层 workflow URL）都落在这个盲区里：`npm run verify` 的 links 环节会对这一类真实断链给出绿色通过，即使 `LICENSE` 或 `package.json` 被改名/移走也不会报错。这与 0.3.8 已建立的目标（锚点与相对链接必须可验证）直接矛盾。
+- 负证据（保留用例与前置说明）：可执行证据在 tests/verify-links.test.mjs 的徽章用例——fixture 用内联图片充当链接文字，内层图片文件存在、外层目标 `missing-outer.md` 不存在（`present.png` 存在）；修复前该 fixture 退出 0 且 failures 为 `[]`，修复后退出 1 且 failures 恰为一条、link 为 `missing-outer.md`、file 为原生相对路径，内层图片不再重复报错。下面的围栏代码块只复述形状，且刻意只用本仓库真实存在或 external 的目标，因为代码块内的链接语法不是链接（这既是 verify-links 的既有语义，也保证本文件自身不会制造新的门禁失败）。
+
+```
+旧扫描器（假阴性）：单条正则，标签内不允许嵌套方括号
+[![badge](https://example.com/badge.svg)](LICENSE)
+[![badge](https://example.com/badge.svg)](package.json)
+  顺序：先匹配到内层图片并在内层右括号处结束，剩余的外层片段前面已无左方括号，
+  因此上两行的外层目标 LICENSE / package.json 从不被校验：它们被改名或移走，links 环节照样通过。
+
+修复后（方括号/圆括号深度感知扫描）：每一层目标各校验一次，按源码顺序
+[![badge](https://example.com/badge.svg)](LICENSE)   内层 external 图片跳过，外层 LICENSE 被真正校验
+[docs [beta]](README.md)                            标签内的方括号不提前结束链接文字，目标为 README.md
+  目标内的平衡圆括号同样由深度感知处理，带括号的真实文件名可被解析，缺失时报告同形 failure；
+  内层图片缺失时仍报告图片缺失（原有图片校验行为保留）。
+```
+
+- 实现（scripts/verify-links.mjs）：改为深度感知扫描，不再用单条正则一次性匹配。方括号嵌套深度决定链接文字的结尾（允许跨行；空行终止段落，未闭合的 `[` 不跨段搜索），圆括号平衡深度决定目标的结尾（目标内可含平衡圆括号），标签内的嵌套构造先于外层、按源码顺序各校验一次；反斜杠转义按 CommonMark 视为字面量；未闭合的 `[` 或 `](` 既不抛异常也不产生 stderr 堆栈，扫描继续。输出 schema 仍为 `{passed,documents,failures}`，失败条目形态不变（file 为 path.relative 原生相对路径，link 为原始目标，reason 仍为 `undecodable-link` 或 `missing-anchor`）。围栏（含缩进/引用块）、行内代码、external/mailto、非 .md 片段不校验、undecodable-link、重复标题 -1/-2 等既有语义未变。
+- 测试（tests/verify-links.test.mjs）：用例数由 9 增至 13，新增四个用例——徽章式嵌套链接只报外层目标、每一层各校验一次且内层缺失图片仍报、链接文字内嵌套方括号与目标内平衡圆括号、未闭合 `[` 或 `](` 被跳过且后续链接继续扫描；既有 9 个用例的断言强度未降低（期望 file 仍以原生相对路径严格相等，未放宽），围栏/行内代码/片段/锚点/编码/路径分隔符行为全部保留。
+- 执行状态：本路由无 shell/网络工具，未运行任何命令；脚本退出码与 documents 数（期望 34，与改动前基线一致）、`npm run verify`、`npm run verify:sdk`（modelRequests:0）以及 Windows/Linux CI 均由控制器在隔离候选上实际确认，未执行前不作为已验证证据。改动仅限 scripts/verify-links.mjs、tests/verify-links.test.mjs、CHANGELOG.md；未改 package.json/依赖、未改 release-manifest.json（由控制器用 verify-manifest --write 重建）、未启用意图分流、未触碰凭据/Provider/权限/会话。
 - 修复发布门禁 scripts/verify-links.mjs 的两处潜在缺陷（仓库当前 CI 通过，未观测到线上回归）：围栏代码块此前只识别顶行反引号围栏，现同时排除列表缩进 0–3 空格与引用块（行首 `>`）内的围栏；行内代码中的示例链接也不再被当作真实链接。相对链接目标含非法百分号转义时，原先未捕获的 URIError 会使门禁以堆栈崩溃退出，现改为结构化失败，failure 带稳定原因 `undecodable-link`；输出仍为 `{passed,documents,failures}` 并以退出码 1 结束。新增 tests/verify-links.test.mjs（6 个测试），通过 `--root` 指向临时 fixture，覆盖围栏、行内代码、外部/mailto/锚点链接、非 .md 文件、缺失相对链接与非法转义的报告；release.mjs 只依赖退出码，行为不变。测试的期望 `file` 值改用 path.join 生成，与 CLI 的 path.relative 输出同形，使严格相等断言在 Windows（反斜杠）与 POSIX 下都成立，未放宽断言语义。改动仅限授权文件；未推送、未创建 PR、未发布。
 
 ## 0.3.0 — 2026-10-31
