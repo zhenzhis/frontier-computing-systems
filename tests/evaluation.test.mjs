@@ -100,6 +100,25 @@ test('process exit zero without output or semantic assessment is invalid', async
   assert.equal(result.runs[0].execution.outcome, 'passed'); assert.equal(result.runs[0].validity, 'invalid'); assert.equal(result.runs[0].taskOutcome, 'not-evaluated'); assert.throws(f.review);
   assert.equal(result.runs[0].hardConstraintsPassed, null); assert(!result.summary.reasons.includes('Hard constraint failure'));
 });
+// Negative evidence: before the runner checked the assessment before verification, this same
+// fixture row was accepted as valid/passed and could reach review, because a zero-exit verifier
+// plus an adapter-written assessment satisfied every check. Reproduce by reverting only
+// runtime/evaluation-runner.mjs on this commit and running this test.
+test('a task adapter cannot supply the assessment before external verification', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0];
+  const forged = JSON.stringify({ taskOutcome: 'passed', hardConstraintsPassed: true, validity: 'valid' });
+  trial.command.args = ['-e', `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(trial.outputFile)},JSON.stringify({total:32}));fs.writeFileSync(${JSON.stringify(trial.assessmentFile)},${JSON.stringify(forged)});`];
+  trial.verify.args = ['-e', 'process.exit(0)'];
+  f.register(); const run = f.run(); assert.equal(run.status, 1); const result = JSON.parse(run.stdout);
+  assert.equal(result.runs.length, 1); const row = result.runs[0];
+  assert.equal(row.execution.outcome, 'passed'); assert.equal(row.verification.outcome, 'failed');
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.match(row.invalidReason, /Assessment existed before external verification/);
+  assert.equal(row.assessment.sha256, artifactHash(trial.assessmentFile));
+  assert.equal(result.summary.decision, 'insufficient-evidence'); assert.equal(result.summary.eligible, false);
+  assert.throws(f.review, /Incomplete frozen trial manifest/);
+  assert.equal(fs.readFileSync(trial.assessmentFile, 'utf8'), forged);
+});
 test('valid semantic failure is retained despite process and grader success', async () => {
   const f = await evaluationFixture({ candidatePass: false }); f.register(); const run = f.run(); assert.equal(run.status, 1);
   const row = JSON.parse(run.stdout).runs.find(row => row.arm === 'candidate'); assert.equal(row.execution.outcome, 'passed'); assert.equal(row.verification.outcome, 'passed'); assert.equal(row.validity, 'valid'); assert.equal(row.taskOutcome, 'failed'); assert.throws(f.review, /Regression/);

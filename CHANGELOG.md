@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 — 2026-11-01
+
+- 按授权计划修复了 evaluation v2 的独立验收边界缺陷：runtime/evaluation-runner.mjs 现在在 command 结束、verify 启动之前再次检查 assessmentFile；若任务适配器已提前写出 assessment，则不运行 verify（避免覆盖证据），该 trial 记为 validity=invalid、verification.outcome=failed（error=assessment-pre-exists，detail 说明 verify 未运行）、invalidReason='Assessment existed before external verification; verify not run'，伪造文件按实际哈希写入回执并原地保留，后续 trial 停止。tests/evaluation.test.mjs 新增回归用例（fixture report trial 的 command 同时写 outputFile 与 taskOutcome=passed 的伪造 assessment，verify 仅为 node -e process.exit(0)），docs/evaluation.md 补充固定执行顺序、该判定与边界。仅为 FCS 公开源码候选编辑；未触碰 Provider/凭据/权限/会话/版本/manifest，未启用 deferred intent routing，未提出性能或科学有效性主张。
+
 ## 0.4.2 — 2026-11-01
 
 - 已完成本地候选（未推送、未建 PR、未改清单/版本/凭据），严格限于 runtime/evaluation.mjs、tests/evaluation.test.mjs、docs/evaluation.md、CHANGELOG.md。 完成： - runtime/evaluation.mjs：对 report 集 trial 在 freezeEvaluation/注册阶段强制验收入口在候选项目之外——verify.cwd 必须显式给出且解析后不在项目内；verify.executable 解析后不得在项目内；verify.args 解析到项目内的路径（含相对穿越、不论注册时是否存在）只允许该 trial 自己的 outputFile。开发/选择集、项目外 oracle/assessmentFile、外部目录与标志位参数不受影响。 - tests/evaluation.test.mjs：新增 3 个用例，实际测试 27→30、assert 48→58。负证据：修改前省略 cwd、cwd/executable 在项目内、args 绝对/相对引用项目文件的 5 种 report 形态均被接受；修改后均以明确错误拒绝，且无 experiment/reservation、无输出文件；开发集项目内验收入口仍可注册并实际执行。正例 fixture 仍通过。 - docs/evaluation.md 明确写出实际强制的边界及仍非 OS 沙箱、不证明评分器语义正确；CHANGELOG.md 的 Unreleased 记录缺陷、修复、断言数量与已知未覆盖形态（argv 内联代码、无运行时重定向防护）。 实际验证： - 修复前后复现脚本结果如上；node --test tests/evaluation.test.mjs：30 pass / 0 fail。 - 全仓 node --test runtime/*.test.mjs tests/*.test.mjs：158 tests，156 pass / 2 skip / 0 fail。 - npm run audit、node scripts/verify-links.mjs：通过（35 documents，failures []）。 - 隔离候选副本（排除 .git/.local，同版本依赖）以 verify-manifest --write 重建 116 文件后：npm run verify 退出 0（audit、links、158 tests、manifest 全绿）；npm run verify:sdk 退出 0，modelRequests:0。 剩余/边界：release-manifest.json、版本字段、精确提交 Windows/Linux CI 与 PR/发布由控制器负责，工作树清单未改；已知未覆盖为 verify.args 内联代码/字符串路径不解析、无运行时重定向防护。无本地阻塞。

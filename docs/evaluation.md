@@ -30,6 +30,8 @@ command 和 verify 均为 `{executable,args,cwd,timeoutMs}`，不经 shell 拼�
 
 command 是受信任的任务执行适配器，产生 outputFile；verify 是预先审查的外部验收器，检查实际产物并产生 assessmentFile。所有输出必须尚不存在、彼此唯一且不覆盖冻结输入；父目录先创建。assessmentFile 必须位于候选项目之外。默认不设置 OS 沙箱，不可用此入口执行任意不可信生成代码。正式模型任务须使用真正的隔离环境与网络策略；“外部路径”只是结构边界。
 
+执行顺序固定为 command → 边界检查 → verify：command 结束后、外部验收开始前，运行器再次检查 assessmentFile 是否已存在。若任务适配器已自行写出 assessment，运行器不启动 verify（以免覆盖该文件），该 trial 记为 `validity=invalid`、`verification.outcome=failed`，invalidReason 指明 assessment 在外部校验前已存在；该文件按哈希写入回执并原地保留供检查，不会被审核当作有效评分。此检查只判断 verify 启动前的文件存在性，不检测“写入后再删除”、运行时重定向或绕过 node 的其它写入方式，仍不是 OS 沙箱，也不能证明评分器语义正确。
+
 report 集在冻结时强制验收入口位于候选工作项目之外：`verify.cwd` 必须给出且解析后不在候选项目内（省略即默认候选项目，因此被拒绝），`verify.executable` 解析后不得位于候选项目内；`verify.args` 中解析到候选项目内的路径（不论注册时是否已存在）只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。开发/选择集 trial 不受这条入口位置限制；项目外 oracle、assessmentFile、外部目录参数与标志位参数保持原用法。该检查基于参数解析后的路径位置，不做运行时重定向防护，也不解析 `-e` 等参数内联代码或字符串里的路径，不是 OS 沙箱，仍不能证明评分器语义正确或评审者独立。
 
 登记后从返回的 `evaluation.digest` 写出 request.json：
@@ -52,7 +54,7 @@ CLI 默认使用用户状态；上述最后一行仅适用于在默认状态注�
 {"taskOutcome":"passed","hardConstraintsPassed":true,"validity":"valid","metrics":{"cost":0.12,"costUnit":"USD","tokens":5000,"interventions":0}}
 ```
 
-taskOutcome 为 passed/failed；hardConstraintsPassed 是独立硬约束结果；validity 可省略（默认 valid）或明确 invalid；metrics 可省略，省略代表未知，不代表零费用。不得为便于通过填写虚构费用。进程退出 0 但无真实产物/有效验收会标记 invalid；验收进程正常退出但任务结果失败则保留为 valid/failed。模型或工具失败应由适配器保存真实错误产物，再由验收器按预定规则归类，不能任意剔除。
+taskOutcome 为 passed/failed；hardConstraintsPassed 是独立硬约束结果；validity 可省略（默认 valid）或明确 invalid；metrics 可省略，省略代表未知，不代表零费用。不得为便于通过填写虚构费用。进程退出 0 但无真实产物/有效验收会标记 invalid；验收进程正常退出但任务结果失败则保留为 valid/failed。模型或工具失败应由适配器保存真实错误产物，再由验收器按预定规则归类，不能任意剔除。由任务适配器提前写出的 assessment 不属于“有效验收”，会被判为 invalid 并停止后续 trial，需人工检查后另行授权新的实验计划。
 
 每次运行先持久化 reservation，随后执行和保存带身份的回执。重复 id、未结算 reservation、未知试验或错误请求摘要会阻止重放；崩溃后不盲目重试。记录 invalid 或未完成的试验不能被审核时静默忽略。当前不自动分配重试；需要重试的模型研究须先将相应槽位和归类规则纳入计划，额外预算变更需另行审查。
 
