@@ -263,6 +263,75 @@ test('nested brackets in link text and balanced parentheses in a destination res
  assert.deepEqual(report.output.failures,[{file:repoPath('docs','brackets.md'),link:'a(c).md'}]);
 });
 
+// A destination may be followed by a quoted title. The previous destination scan
+// returned null on the first whitespace, so these CommonMark links were treated as
+// prose: a renamed or moved target stayed green. Both title quote styles must check
+// the path before the title, and the title must not become part of the reported link.
+test('a quoted title does not hide the destination from validation',t=>{
+ const root=fixture(t);
+ place(root,'docs/present.md','# Present\n');
+ place(root,'docs/titled.md','[docs](missing.md "Title")\n');
+ let report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.equal(report.output.documents,2);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','titled.md'),link:'missing.md'}]);
+ assert.equal(report.stderr,'');
+ place(root,'docs/titled.md',"[docs](missing.md 'Title')\n");
+ report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','titled.md'),link:'missing.md'}]);
+ assert.equal(report.stderr,'');
+ place(root,'docs/titled.md',[
+  '[docs](present.md "Title")',
+  "[docs](present.md 'Title')",
+ ].join('\n'));
+ report=run(root);
+ assert.equal(report.status,0,report.stderr);
+ assert.equal(report.output.passed,true);
+ assert.deepEqual(report.output.failures,[]);
+});
+
+// A pointy-bracket destination may contain spaces, which the old scan also treated
+// as a reason to stop. The reported link is the unwrapped path, and a file that
+// really exists at that spaced path must make the same declaration pass: proving the
+// path is checked as a file rather than merely skipped.
+test('an angle-bracket destination is validated as an unwrapped path including spaces',t=>{
+ const root=fixture(t);
+ place(root,'docs/angled.md','[docs](<missing dir/x.md>)\n');
+ let report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.equal(report.output.documents,1);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','angled.md'),link:'missing dir/x.md'}]);
+ assert.equal(report.stderr,'');
+ place(root,repoPath('docs','missing dir','x.md'),'# X\n');
+ report=run(root);
+ assert.equal(report.status,0,report.stderr);
+ assert.equal(report.output.passed,true);
+ assert.equal(report.output.documents,2);
+ assert.deepEqual(report.output.failures,[]);
+});
+
+// The reverse protection: text that merely looks like a link but has no delimited
+// title is not a valid inline link, so the old skip must stay a skip. It also must not
+// swallow the real link that follows in the same document.
+test('link-like prose without a delimited title stays unvalidated',t=>{
+ const root=fixture(t);
+ place(root,'docs/prose.md','The syntax is [a](see the docs) in prose.\n');
+ let report=run(root);
+ assert.equal(report.status,0,report.stderr);
+ assert.equal(report.output.passed,true);
+ assert.equal(report.output.documents,1);
+ assert.deepEqual(report.output.failures,[]);
+ place(root,'docs/prose.md','The syntax is [a](see the docs).\n\n[real](missing.md)\n');
+ report=run(root);
+ assert.equal(report.status,1,report.stderr);
+ assert.equal(report.output.passed,false);
+ assert.deepEqual(report.output.failures,[{file:repoPath('docs','prose.md'),link:'missing.md'}]);
+});
+
 // Unbalanced constructs are documentation as often as mistakes: they must be skipped
 // without a throw, without a stack on stderr, and without swallowing the links that
 // follow them in the same document.
