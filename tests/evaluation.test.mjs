@@ -56,6 +56,33 @@ test('project-local final oracle or verifier source is refused', async () => {
   plan.cases[0].oracleFile = plan.cases[0].inputFiles[0]; assert.throws(f.register, /outside worker/);
   plan.cases[0].oracleFile = original; plan.verifierFiles = plan.cases[0].inputFiles; assert.throws(f.register, /outside worker/);
 });
+test('report verifier cwd or executable inside or defaulting to the project is refused before reservation', async () => {
+  const f = await evaluationFixture(); const plan = f.registration.evaluation, trial = plan.trials[0], original = { ...trial.verify };
+  delete trial.verify.cwd; assert.throws(f.register, /Report verifier cwd must be outside worker project/);
+  trial.verify = { ...original, cwd: f.project }; assert.throws(f.register, /Report verifier cwd must be outside worker project/);
+  trial.verify = { ...original, executable: plan.cases[0].inputFiles[0] }; assert.throws(f.register, /Report verifier executable must be outside worker project/);
+  assert.equal(f.store.read().experiments.fixture, undefined); assert.equal(fs.existsSync(trial.outputFile), false); assert.equal(fs.existsSync(trial.assessmentFile), false);
+});
+test('report verifier args may only reference the trial output inside the project', async () => {
+  const f = await evaluationFixture(); const plan = f.registration.evaluation, trial = plan.trials[0], original = trial.verify.args;
+  const local = path.join(f.project, 'local-grader.cjs'); fs.writeFileSync(local, 'process.exit(0);\n');
+  trial.verify.args = [local, ...original.slice(1)]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  trial.verify.args = [path.relative(f.verifier, local), ...original.slice(1)]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  const future = path.join(f.project, 'future-grader.cjs');
+  trial.verify.args = [future, ...original.slice(1)]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  trial.verify.args = [path.relative(f.verifier, future), ...original.slice(1)]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  trial.verify.args = ['--strict', ...original]; const experiment = f.register();
+  assert(experiment.evaluation.plan.trials[0].verify.args.includes('--strict')); assert(experiment.evaluation.plan.trials[0].verify.args.includes(trial.outputFile));
+});
+test('development and selection trials may keep a project-local verifier', async () => {
+  for (const split of ['development', 'selection']) {
+    const f = await evaluationFixture(); const plan = f.registration.evaluation, trial = plan.trials[0], local = path.join(f.project, 'local-grader.cjs');
+    fs.copyFileSync(f.grader, local); plan.cases[0].split = split; plan.verifierFiles = [local];
+    trial.verify = { executable: process.execPath, args: [local, plan.cases[0].oracleFile, trial.outputFile, trial.assessmentFile], cwd: f.project };
+    f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+    const result = JSON.parse(run.stdout); assert.equal(result.runs.length, 2); assert(result.runs.every(row => row.verification.outcome === 'passed')); assert.equal(result.summary.eligible, false);
+  }
+});
 test('unknown, repeated, and unresolved trial reservations cannot replay', async () => {
   const f = await evaluationFixture(); f.register(); const ids = f.registration.evaluation.trials.map(trial => trial.id);
   assert.throws(() => f.store.beginEvaluation('fixture', 'unknown'), /Unknown/);
