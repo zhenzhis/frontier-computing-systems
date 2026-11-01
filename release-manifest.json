@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.5",
+  "version": "0.4.6",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -10,7 +10,7 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "sha256": "52fd87007a192a7a14f791be26d103d543d199d4154078f31147675f56271b73"
+      "sha256": "1b2f642d6929501182761dfd80d7e063b588ce1eb30815dff674bac0dc13dd0c"
     },
     {
       "path": ".gitignore",
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "8bf025e2c523c0b6379247cfd2f751417f39e7216a5204553bba40daa2a23a21"
+      "sha256": "c90494eefab113d97c88ffe561bb2dba60daa8da3eeac9bcb9cb40d9cc6f9908"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -46,7 +46,7 @@
     },
     {
       "path": "docs/maintenance.md",
-      "sha256": "f83bdf24314ce4a69fc9bbf67ea43ea2f141cb38af0f1e7a31a76a3bbd7f1c16"
+      "sha256": "ac9417837ed6516393a627bc2379f4efb16671ab489d3cd58c94308c3a24898a"
     },
     {
       "path": "docs/research/evaluation-methods.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "7eea3473ec5642ed54b870ac44cdf0dfdf290a81a54c5df048cbeaba005b5e49"
+      "sha256": "e20be1dff6bfff3bade8f0d751f883a1a1ee33906f65ebf5db19dbbd0d2ee8b2"
     },
     {
       "path": "package.json",
-      "sha256": "d6cdec4234825ab13577e3a15c2964fa1d9269d83038832a024b380801b7bb8b"
+      "sha256": "2c3d93366cb41571df359899e417e66c06799fc8916f65ded866a003dc5eb9e9"
     },
     {
       "path": "README.en.md",

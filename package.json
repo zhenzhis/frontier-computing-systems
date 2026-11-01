@@ -1,6 +1,6 @@
 {
   "name": "frontier-computing-systems",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Agent systems, harnesses and evaluation research; versioned, reversible Pi workflow implementation.",
   "license": "MIT",
   "type": "module",
