@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6 — 2026-11-01
+
+- 已完成本地候选修复（无推送/PR/合并/tag，未改清单、凭据或权限）。 背景：本检出在基线 7bf2680，未包含上一轮候选；我按失败日志中的用例名与行号重建了同一候选，再把 Windows 失败的根因修掉。 改动（仅授权三文件）： 1. tests/verify-links.test.mjs（新建，6 用例）：保留原有用例与断言强度；新增 repoPath=path.join 辅助，把 5 处失败断言的期望 file 从硬编码 'docs/xxx.md' 改为 repoPath('docs','xxx.md')，与脚本 path.relative 的原生分隔符同形。Windows 下实际/期望都是 docs\xxx.md，POSIX 下都是 docs/xxx.md，仍是 deepStrictEqual 严格相等，未放宽。 2. scripts/verify-links.mjs：恢复上一轮候选的围栏（含缩进/引用块）、行内代码剥离与非法百分号转义结构化报告实现；输出 schema 仍为 {passed,documents,failures}。 3. CHANGELOG.md：Unreleased 记录缺陷、测试与 Windows 路径断言修复。 实际运行（Linux, Node 24.22.0）： - node --test tests/verify-links.test.mjs：6/6 通过。 - node scripts/verify-links.mjs：退出 0，passed:true，documents:34（与改动前一致），failures:[]。 - npm run audit：passed，112 files，0 failures。 - npm test：108 tests，106 pass，2 skip（Windows-only parser 用例），0 fail。 - 隔离副本用 scripts/verify-manifest.mjs --write 重生成清单后 npm run verify：退出 0（111 files，manifest 通过）；同一副本 npm run verify:sdk：passed，modelRequests:0。 - 额外用 path.win32 校验 5 处期望：join('docs',x) === relative(root, root\docs\x)，均为 docs\x。 - 本工作树 node scripts/verify-manifest.mjs 仍报 CHANGELOG.md、scripts/verify-links.mjs 漂移及 tests/verify-links.test.mjs 未登记，这是预期的；release-manifest.json 留给控制器重生成。 未运行：真实 Windows 执行（本机 Linux），故 Windows 侧仍需控制器在精确提交 CI 验证；已通过原生分隔符等价性与全部用例静态/动态检查降低风险。
+
 ## 0.3.5 — 2026-10-31
 
 - 在 scripts/audit-public.mjs 中把 personal-home 规则从「仅 Windows 盘符形式」扩展为同时覆盖 POSIX 绝对家目录路径（/Users/<name>/ 与 /home/<name>/），并新增 tests/audit-public.test.mjs（6 个测试）。只改动了授权的两个文件；未运行任何命令（本 worker 无 shell/网络工具），所有可执行验收由控制器执行。
@@ -22,6 +26,8 @@
 - Deliver assigned DSH source changes while discarding worker-generated release hashes; the supervisor remains responsible for regenerating the manifest.
 
 ## Unreleased
+
+- 修复发布门禁 scripts/verify-links.mjs 的两处潜在缺陷（仓库当前 CI 通过，未观测到线上回归）：围栏代码块此前只识别顶行反引号围栏，现同时排除列表缩进 0–3 空格与引用块（行首 `>`）内的围栏；行内代码中的示例链接也不再被当作真实链接。相对链接目标含非法百分号转义时，原先未捕获的 URIError 会使门禁以堆栈崩溃退出，现改为结构化失败，failure 带稳定原因 `undecodable-link`；输出仍为 `{passed,documents,failures}` 并以退出码 1 结束。新增 tests/verify-links.test.mjs（6 个测试），通过 `--root` 指向临时 fixture，覆盖围栏、行内代码、外部/mailto/锚点链接、非 .md 文件、缺失相对链接与非法转义的报告；release.mjs 只依赖退出码，行为不变。测试的期望 `file` 值改用 path.join 生成，与 CLI 的 path.relative 输出同形，使严格相等断言在 Windows（反斜杠）与 POSIX 下都成立，未放宽断言语义。改动仅限授权文件；未推送、未创建 PR、未发布。
 
 ## 0.3.0 — 2026-10-31
 
