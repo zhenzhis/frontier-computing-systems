@@ -56,10 +56,19 @@ jobs:
             gh release create "$tag" --verify-tag --title "Frontier Computing Systems $tag" --generate-notes --latest=false
           fi
           # A delayed older tag must not replace a newer published release as Latest.
-          latest="$(gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" | node -e '
+          latest="$(gh api --header 'Cache-Control: no-cache' --paginate --slurp "repos/$GH_REPO/releases?per_page=100&fcs_run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | FCS_RELEASE_TAG="$tag" node -e '
             let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>{
               const releases=JSON.parse(input).flat().filter(r=>!r.draft&&!r.prerelease&&/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(r.tag_name));
+              // This tag was just confirmed published; list visibility can lag behind creation.
+              releases.push({tag_name:process.env.FCS_RELEASE_TAG});
               releases.sort((a,b)=>{const x=a.tag_name.slice(1).split(".").map(BigInt),y=b.tag_name.slice(1).split(".").map(BigInt);for(let i=0;i<3;i++){if(x[i]!==y[i])return x[i]>y[i]?-1:1}return 0});
               if(!releases.length)throw Error("No published stable release");process.stdout.write(releases[0].tag_name);
             });')"
           gh release edit "$latest" --latest --verify-tag
+          for attempt in 1 2 3 4 5 6; do
+            actual="$(gh api --header 'Cache-Control: no-cache' "repos/$GH_REPO/releases/latest?fcs_run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$attempt" --jq .tag_name)" || actual=""
+            [[ "$actual" == "$latest" ]] && exit 0
+            sleep 5
+          done
+          echo "Latest release did not converge to $latest" >&2
+          exit 1
