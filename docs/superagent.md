@@ -53,3 +53,6 @@ One controller owns a shared file set. Different engines use separate checkouts.
 For local Pi deployment, run `node scripts/deploy-superagent.mjs --config <private-deployment.json> --candidate <source> --artifacts <private-receipts> --apply`. The private deployment configuration names `agentDir`, `deployRoot`, `provider` and `model`. The script installs a manifest-addressed source version, loads the actual active extension entry, invokes read-only status, performs an installed model/file-tool probe, and compares personal configuration hashes. It preserves a prior extension wrapper and records whether existing sessions were reloaded. An operator still needs to configure process supervision for persistent unattended service.
 
 File-tool restrictions, queues, worktrees and account wrappers are not an OS sandbox. The supervisor's external tests protect against common self-grading failures, but cannot establish arbitrary semantic correctness or make untrusted candidate code safe to execute. Isolate execution environments according to the actual trust boundary. Keep verifier provenance and source/runtime deployment receipts separate.
+# 持续研究
+
+前沿来源追踪、原创假设、自动测试和有效更新门禁见 [前沿研究循环](research/frontier-loop.md)。该循环需在私有服务配置中显式启用，与现有任务和发布链路共用授权、暂停及固定模型；不会因阅读或安装而启动。

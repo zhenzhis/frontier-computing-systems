@@ -16,6 +16,7 @@ const server=http.createServer(async(req,res)=>{try{
  if(req.headers['x-fcs-request']!=='1')throw Error('Local API request header required');
  res.setHeader('Content-Type','application/json');
  if(req.method==='GET'&&req.url==='/api/status'){res.end(JSON.stringify({...pilot.store.status(),model:config.model,running:pilot.running.size,failures:pilot.store.list('failure').slice(-10),results:pilot.store.list('result').slice(-10)}));return}
+ if(req.method==='GET'&&req.url==='/api/frontier'){res.end(JSON.stringify(pilot.frontier.status()));return}
  let body='';for await(const chunk of req){body+=chunk;if(body.length>128000)throw Error('Request too large')}
  const data=body?JSON.parse(body):{};let value;
  if(req.method==='POST'&&req.url==='/api/event')value=pilot.store.receive(data);

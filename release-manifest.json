@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.3.10",
+  "version": "0.4.0",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "ec518d2913417aadd7022ebfc9794ebb7c3075d762343abfe3ac316a6075a8eb"
+      "sha256": "9164cb0968de2fbe0f8dd309a2b4ced40abcf25773b5c2ccb1837a3659515a0c"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -57,6 +57,10 @@
       "sha256": "c5677c4c0da928005d3668eeefd36d13834de7e5e6b6fc2124e77e5b0423ab6b"
     },
     {
+      "path": "docs/research/frontier-loop.md",
+      "sha256": "3a43056e5eaaf4e3ac67fa89c8bfcaa408af4b6bde42685b08f812c42415f9d2"
+    },
+    {
       "path": "docs/research/intent-routing.md",
       "sha256": "c67016caf7ee918164d945c8fc05f67f5403798ec030867ffd4ab5fdda990c85"
     },
@@ -70,7 +74,7 @@
     },
     {
       "path": "docs/superagent.md",
-      "sha256": "3195c469d278d40b5ef46a1d93981f8ac082659f57f6f6bbc836c8ed67556d49"
+      "sha256": "3043d04793c412efdb697a4e0889f8e0d3b5b12c4161827e83420f019fffbc0b"
     },
     {
       "path": "docs/tasks/bootstrap.md",
@@ -170,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "2c735003a72c64c260daed29881ca5e64933dcb433deddcc3cc2baacd026475e"
+      "sha256": "07e1d53611d53a15d962d47e184912b6618c9883b1e7a723fd7273a5e6255f31"
     },
     {
       "path": "package.json",
-      "sha256": "2a6582883cfd84bb3a147cde931273b594f31a60a5c0edd5c67cc1375fa66fd3"
+      "sha256": "5b4d271f922960c5a06b9e4c917b2e7d18ad02a7ab4350ca8f1bbeebeabf9cd0"
     },
     {
       "path": "README.en.md",
@@ -186,7 +190,7 @@
     },
     {
       "path": "RESEARCH.md",
-      "sha256": "358ef26227021cd1af62662e6b7c41f6cb59c8ac70d069010f4519f004bb9bbe"
+      "sha256": "beabfe92fe507db676b8368d053254a3a228cbc7e58ddca3ff217a4fdd62b609"
     },
     {
       "path": "ROADMAP.md",
@@ -194,11 +198,11 @@
     },
     {
       "path": "runtime/autopilot.mjs",
-      "sha256": "5b5ccc93d99cef8ab4682c7a3f0e5f68b051c07bdd476e544b1a8e60ee7ff945"
+      "sha256": "4fbc17c170c6e0ef1b0e323edc7b4481bce556000f120b98190877f5007ee5fa"
     },
     {
       "path": "runtime/autopilot.test.mjs",
-      "sha256": "c9ad4054f5a2782980b704bcfa5e5c60c970d16bcfb2462d00b47d344b03e393"
+      "sha256": "6cbbc64f1614978628027e8198fb4034a929fa2aacbc07bf345fd06d3587099f"
     },
     {
       "path": "runtime/cli.mjs",
@@ -245,6 +249,22 @@
       "sha256": "879f6acfe72aadbb477a55fb77abcaf7242eb6acc80edb74aaf8f133ad35966d"
     },
     {
+      "path": "runtime/frontier-bench.mjs",
+      "sha256": "940c679481943dd3febf928ed8afb7861ad0c35f5e28bfa4416906bec12ec48f"
+    },
+    {
+      "path": "runtime/frontier-sources.mjs",
+      "sha256": "9fff3c13ca7d4eb5d127fdfff3829b69f5e550a8870accb236768a60340f0bf0"
+    },
+    {
+      "path": "runtime/frontier.mjs",
+      "sha256": "5c3734afde04b77dd67185fc2ceea1978102279ff1ce6db47ecdbe3b4e4563d5"
+    },
+    {
+      "path": "runtime/frontier.test.mjs",
+      "sha256": "0f41f2e5674bff937e9d1ea05afe49bcff841d8276522ab5d437a4b79cac101e"
+    },
+    {
       "path": "runtime/model-gateway.mjs",
       "sha256": "d16b8c86e260d0cfc57fb3efb0799eea86231ce5f6a093b735b6cec84907457c"
     },
@@ -258,7 +278,7 @@
     },
     {
       "path": "runtime/superagent-model.mjs",
-      "sha256": "814a522a54e97de7f7a091fd91f255539a1c25f91a36f3f6d413347d9bdf57aa"
+      "sha256": "f1496010cdd9fb530c25fbcdd39c4ce5be86f894b6ef4cc28944509460d9e96a"
     },
     {
       "path": "runtime/superagent-panel.html",
@@ -266,11 +286,11 @@
     },
     {
       "path": "runtime/superagent-service.mjs",
-      "sha256": "26a05656ff67eb8bbb0cd3b053e08b7476511a1a190b46e90191adbe76ae04c4"
+      "sha256": "42b6107c6ae55a541b78ad44620ff2e756aac53bec126c0f1d1a40d18d25e1d5"
     },
     {
       "path": "runtime/superagent.mjs",
-      "sha256": "31c67b4f0f5018e982397a4d7c35eb8592d0a7874ed7cd86ad44805f176d1d86"
+      "sha256": "c68a263d0512080e3911240942113f8b5eb73ce970faacfb478a2477d983e486"
     },
     {
       "path": "runtime/superagent.test.mjs",
