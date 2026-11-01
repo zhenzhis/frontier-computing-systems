@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 2026-11-01
+
+- 在 runtime/autopilot.mjs 中把控制器版本所有权做成单一可复用条款，注入 planner 与 worker 指令，并在独立验证之前（而非之后）就拒绝版本漂移；新增三个测试（提示条款捕获、execute() 前置拒绝的负面证据、assertVersionOwnership 单元比对），并在 docs/superagent.md 增补一条可核对的、明确不作有效性宣称的陈述。未运行任何命令（无 shell），因此不声称测试或 verify/verify:sdk 通过；release-manifest.json 未刷新（不在我可写文件集内）。
+
 ## 0.4.0 — 2026-11-01
 
 - Add opt-in frontier source monitoring, versioned observations, original hypothesis research and automatic public-source discovery. The scientist uses the existing fixed model channel and cannot grant itself tools or authority.
