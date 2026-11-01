@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-11-01
+
+- Add opt-in frontier source monitoring, versioned observations, original hypothesis research and automatic public-source discovery. The scientist uses the existing fixed model channel and cannot grant itself tools or authority.
+- Add a frozen paired artifact benchmark with separate development, selection and held-out cases, independent file-byte grading, retained failures and usage, and a strict limited-adoption rule. Synthetic success is not a claim of broad frontier capability or real-world improvement.
+- Expose research progress through the local API and Pi status/evidence commands. Source failures remain visible and ordinary engineering discovery continues when research is idle. Pause and cancellation apply to research as well as development.
+- Document research scope, operational limits and the evidence required before adopting architectural changes. Personal model configuration, sessions and deferred intent routing retain their existing boundaries.
+
 ## 0.3.10 — 2026-11-01
 
 - 已完成本地候选（仅工作树修改，未提交/推送/建 PR），严格限于 scripts/verify-links.mjs、tests/verify-links.test.mjs、CHANGELOG.md。 完成： - scripts/verify-links.mjs：destination() 现支持目标后的双/单引号标题，以及尖括号目标（保留内部空格、报告时去掉尖括号）；仅当目标/可选标题由本链接的 `)` 正常闭合时才校验，避免把 `[a](see the docs)` 这类散文变成误报；目标内空白、跨行目标、未闭合/多余内容仍返回 null 不抛错，既有输出契约与围栏/行内代码/锚点/编码/嵌套/平衡括号语义不变。 - tests/verify-links.test.mjs：用例 13 → 16。新增双/单引号标题缺失与存在、尖括号含空格目标（不存在报去壳路径、真实存在则通过）、链接状散文不校验且不吞后续真实链接；既有 13 个用例与严格原生路径断言全部保留。 - CHANGELOG.md：Unreleased 记录缺陷、修复、新用例数、未覆盖形态（引用式链接定义、HTML href/src、跨行目标、括号标题）及未声称科学结论。负证据置于围栏代码块，仓库自扫描未新增失败。 验证（本地实际执行）： - node scripts/verify-links.mjs：退出 0，documents 34，failures []。 - node --test tests/verify-links.test.mjs：16 pass / 0 fail。 - 全仓 node --test runtime/*.test.mjs tests/*.test.mjs：120 tests，118 pass / 2 skip / 0 fail。 - node scripts/audit-public.mjs：112 files，0 failures。 - 临时 fixture 复现修复前退出 0、修复后退出 1（failures 严格为去标题/去壳路径），目标真实存在时退出 0；stderr 为空。 剩余：控制器在隔离候选上执行 npm run verify、npm run verify:sdk（modelRequests:0）、用 verify-manifest --write 重建 release-manifest.json、精确提交 Windows/Linux CI 与发布。本地无待办，无阻塞。

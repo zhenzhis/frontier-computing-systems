@@ -47,6 +47,7 @@ export class Superagent {
    this.put('config','current',value);if(old&&old.version!==value.version)this.engine.policyChanged(old.version,value.version,new Map(this.repo.tickets.open().map(t=>[t.id,{requesterAllowed:this.policy().revalidate(t.mandate)}])));return value});
  }
  config(){return this.get('config','current')??{revision:0,version:'unconfigured',mode:'off',allowed:[],rules:[],sources:[],paused:true}}
+ count(kind){return this.db.prepare('SELECT COUNT(*) AS n FROM objects WHERE kind=?').get(kind).n;}
  sourceScope(trigger){const c=this.config();return c.sources?.includes(trigger.source)?{listened:true,observed:true}:{listened:false,reason:'sourceNotAuthorized'}}
  policy(){const c=this.config(),enabled=new Set(c.rules.filter(r=>r.enabled).map(r=>r.id));return{version:c.version,paused:c.paused??false,evalTimeoutMs:c.evalTimeoutMs??120000,
   gate:t=>c.allowed.includes(`${t.actor.source}:${t.actor.id}`)&&t.human&&t.addressed?{admissible:true,strength:'explicit',basis:{via:'addressed',source:t.source,scope:t.meta}}:
@@ -71,10 +72,10 @@ export class Superagent {
    // External delivery may have succeeded before the crash. Preserve ambiguity for channel reconciliation.
    this.db.prepare('UPDATE effects SET status=?,lease=NULL,error=? WHERE id=?').run(row.kind==='reply'?'unknown':'pending','Host restarted; inspect/reconcile before repeating external effects',row.id);
   }for(const ticket of this.repo.tickets.open()){const a=latestAssignment(ticket);if(a?.state==='running')this.engine.assignmentInterrupted(ticket.id,a.id)}});}
- reference(id){const [kind,...parts]=id.split('/');if(!['trigger','thread','ticket','decision','evidence','verification','review','plan','result','execution'].includes(kind))throw Error('Unknown reference kind');return this.get(kind,parts.join('/'));}
+ reference(id){const [kind,...parts]=id.split('/');if(!['trigger','thread','ticket','decision','evidence','verification','review','plan','result','execution','frontier-item','frontier-observation','frontier-source','frontier-research','frontier-hypothesis','frontier-study','frontier-lesson'].includes(kind))throw Error('Unknown reference kind');return this.get(kind,parts.join('/'));}
  context(ticketId,{maxChars=6000}={}){const t=this.repo.tickets.get(ticketId);if(!t)throw Error('Unknown ticket');const refs=[`trigger/${t.origin.triggerId}`,...this.repo.threads.list().filter(x=>x.subscriptions.includes(ticketId)).map(x=>`thread/${x.key}`)];
   const text=JSON.stringify({id:t.id,title:t.title,mandate:t.mandate,latest:latestAssignment(t),inputs:t.inputs.slice(-8),refs});return{text:text.slice(0,maxChars),chars:text.length,truncated:text.length>maxChars,read:`ticket/${t.id}`,refs};}
- status(){const tickets=this.repo.tickets.list().map(t=>({id:t.id,title:t.title,stage:ticketStage(t),ended:t.ended,assignment:latestAssignment(t)?.state}));return{configured:this.config().revision>0,paused:this.config().paused??false,mode:this.config().mode,tickets,needsAttention:tickets.filter(t=>t.stage.stage==='person'),effects:this.db.prepare('SELECT kind,status,COUNT(*) AS count FROM effects GROUP BY kind,status').all()};}
+ status(){const tickets=this.repo.tickets.list().map(t=>({id:t.id,title:t.title,stage:ticketStage(t),ended:t.ended,assignment:latestAssignment(t)?.state}));return{configured:this.config().revision>0,paused:this.config().paused??false,mode:this.config().mode,tickets,needsAttention:tickets.filter(t=>t.stage.stage==='person'),frontier:{sources:this.count('frontier-source'),items:this.count('frontier-item'),research:this.get('frontier-state','current')??null,studies:this.count('frontier-study'),accepted:this.count('frontier-lesson')},effects:this.db.prepare('SELECT kind,status,COUNT(*) AS count FROM effects GROUP BY kind,status').all()};}
  close(){this.db.close()}
 }
 export function inspectSuperagent(project,options={}){const root=superagentDirectory(project,options.stateRoot);if(!fs.existsSync(path.join(root,'superagent.sqlite')))return{configured:false,automaticExecution:false,tickets:[],needsAttention:[]};const s=new Superagent(project,options);try{return s.status()}finally{s.close()}}

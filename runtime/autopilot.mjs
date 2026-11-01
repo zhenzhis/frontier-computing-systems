@@ -9,6 +9,7 @@ import {projectPath} from './control.mjs';
 import {runDshWorker} from './dsh-executor.mjs';
 import {inspect} from '../scripts/audit-public.mjs';
 import {backup} from '../scripts/backup.mjs';
+import {FrontierLab} from './frontier.mjs';
 
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:8*1024*1024}).trim();
 export function sourceFingerprint(project){const scope=fs.realpathSync(project),files=[...new Set(git(project,'ls-files','--cached','--others','--exclude-standard','-z').split('\0').filter(Boolean))].filter(file=>fs.existsSync(projectPath(scope,file))).sort();return digest(files.map(file=>[file,crypto.createHash('sha256').update(fs.readFileSync(projectPath(scope,file))).digest('hex')]))}
@@ -77,14 +78,15 @@ export async function publishCandidate({project,repository,branch,title,body,art
  guard('merge');save({stage:'merge-intent'});r=await command('gh',['pr','merge',String(number),'--repo',repository,'--squash','--match-head-commit',commit,'--delete-branch'],{cwd:project,log,signal});if(!r.passed)throw Error('Merge outcome requires reconciliation');save({stage:'merged'});return{commit,url,number,merged:true};}
 
 export class Autopilot {
- constructor(project,config,{stateRoot,runRole=runModelRole,verify=verifyCandidate,publish=publishCandidate,install=installMergedDependencies}={}){if(!config.authorization||!config.provider||!config.model||!config.agentDir)throw Error('Autopilot requires explicit authorization and an exact model channel');this.config=config;this.store=new Superagent(project,{stateRoot});this.runRole=runRole;this.verify=verify;this.publish=publish;this.install=install;this.running=new Map();this.pending=new Set();this.stopping=false;}
+ constructor(project,config,{stateRoot,runRole=runModelRole,verify=verifyCandidate,publish=publishCandidate,install=installMergedDependencies}={}){if(!config.authorization||!config.provider||!config.model||!config.agentDir)throw Error('Autopilot requires explicit authorization and an exact model channel');this.config=config;this.store=new Superagent(project,{stateRoot});this.runRole=runRole;this.verify=verify;this.publish=publish;this.install=install;this.running=new Map();this.pending=new Set();this.stopping=false;this.frontier=new FrontierLab(this.store,{...config.frontier,exactModel:config.model,provider:config.provider},{role:(...args)=>this.role(...args)});}
  authorize(action){const c=this.store.config(),current=c.authorization;return!this.stopping&&!c.paused&&current===this.config.authorization&&((action==='publish'&&this.config.publish===true)||(action==='merge'&&this.config.autoMerge===true)||action==='local')}
  record(kind,value){this.store.atomic(()=>this.store.put(kind,crypto.randomUUID(),{at:new Date().toISOString(),...value}))}
  async role(role,project,prompt,options={}){return this.runRole({project,agentDir:this.config.agentDir,provider:this.config.provider,model:this.config.model,role,prompt,stateDir:this.store.root,
   onUsage:usage=>this.record('usage',{role,usage,requestedModel:this.config.model}),onProgress:p=>this.record('progress',{role,...p}),contextRead:id=>this.store.reference(id),signal:AbortSignal.timeout((this.config.cycleMinutes??30)*60000),...options})}
- discover(){const c=this.store.config();if(c.paused||c.mode!=='auto'||this.running.size||this.store.repo.tickets.open().length)return;const revision=git(this.store.project,'rev-parse','HEAD');const id=`discovery-${revision.slice(0,12)}-${Math.floor(Date.now()/(this.config.discoverySeconds??900)/1000)}`;
+ discover(){const c=this.store.config();if(c.paused||c.mode!=='auto'||this.running.size||this.store.repo.tickets.open().length||this.frontier.busy||this.frontier.wantsResearch()||(this.frontier.enabled&&this.store.get('frontier-state','current')?.activeExperiment))return;const revision=git(this.store.project,'rev-parse','HEAD');const id=`discovery-${revision.slice(0,12)}-${Math.floor(Date.now()/(this.config.discoverySeconds??900)/1000)}`;
   if(this.store.repo.triggers.get(id))return;
-  this.store.receive({id,source:'repository',threads:[{source:'repository',id}],actor:{source:'repository',id:'scanner'},human:false,at:new Date().toISOString(),text:'Inspect the current repository, roadmap and recorded failures. Propose one reproducible, useful, bounded improvement, or ignore when evidence is insufficient. Do not manufacture activity.',meta:{revision}});}
+  const research=this.store.list('frontier-research').slice(-2).map(x=>({reference:`frontier-research/${x.id}`,topic:x.topic,limitation:'Source claims and research proposals require independent checks; cite repository evidence in any public problem statement.'}));
+  this.store.receive({id,source:'repository',threads:[{source:'repository',id}],actor:{source:'repository',id:'scanner'},human:false,at:new Date().toISOString(),text:'Inspect the current repository, roadmap and recorded failures. Propose one reproducible, useful, bounded improvement, or ignore when evidence is insufficient. Do not manufacture activity. Use frontier research to identify missing independent evaluators and original testable ideas. Source popularity and a synthetic prompt study cannot justify architecture adoption. Any performance claim needs a frozen transferable baseline and independent outcome. Preserve failures and defer unvalidated behavior changes. Recent research evidence: '+JSON.stringify(research),meta:{revision}});}
  async assess(effect){const {triggers}=effect.value,trigger=triggers[0],held=trigger&&this.store.engine.candidate(trigger.id);
   if(!held||held.evalId!==effect.value.evalId)throw assessmentFailure('assessment-stale','The Eval no longer holds this assessment',{terminal:true});
   this.store.engine.candidateDelivered(effect.id);
@@ -174,7 +176,10 @@ export class Autopilot {
    const receipt={ticketId:ticket.id,base,branch,worktree,plan,artifacts,verification,review,worker,model:this.config.model,status:'validated',fingerprint:sourceFingerprint(worktree)};this.store.atomic(()=>this.store.put('candidate',ticket.id,receipt));await this.adopt(receipt,controller.signal);
   }catch(error){this.record('failure',{ticketId:ticket.id,error:String(error.message)});const t=this.store.repo.tickets.get(ticket.id),permanent=/changed before adoption|changed before publication|Public message failed|Remote branch differs|PR state\/head changed|Exact-commit CI failed|Existing release tag differs|source backup destination/.test(error.message);if(t&&!t.ended&&(!this.store.get('candidate',ticket.id)||permanent)){this.store.engine.report(ticket.id,{state:'failed',summary:String(error.message).slice(0,1000)});this.store.engine.report(ticket.id,{state:'dropped',summary:'Unaccepted candidate preserved with failure evidence; a later discovery may propose a different repair.'})}throw error}
   finally{clearTimeout(timeout);this.running.delete(ticket.id);release()}}
- async tick(){if(this.stopping||this.store.config().paused){this.cancelCurrent();return}this.discover();this.store.engine.evaluateDue();
+ async tick(){if(this.stopping||this.store.config().paused){this.cancelCurrent();return}
+  if(this.frontier.busy&&this.frontier.sourceDue()&&!this.pending.has('frontier-poll')){this.pending.add('frontier-poll');void this.frontier.poll(this.frontier.controller.signal).catch(error=>this.record('failure',{source:'frontier-poll',error:String(error.message)})).finally(()=>this.pending.delete('frontier-poll'));}
+  if(this.frontier.due&&!this.pending.has('frontier')){this.pending.add('frontier');void this.frontier.tick({idle:!this.running.size&&!this.pending.has('assess')}).catch(error=>this.record('failure',{source:'frontier',error:String(error.message).slice(0,500)})).finally(()=>this.pending.delete('frontier'));}
+  this.discover();this.store.engine.evaluateDue();
   for(const kind of ['stop','input','assess','launch','reply']){
    if((kind==='launch'&&this.running.size)||(kind==='assess'&&this.pending.has('assess')))continue;
    const effect=this.store.claim([kind]);if(!effect)continue;
@@ -186,6 +191,6 @@ export class Autopilot {
    }catch(error){this.record('failure',{effectId:effect.id,error:String(error.message)});this.store.settle(effect,error)}
   }
  }
- cancelCurrent(){this.assessController?.abort();for(const item of this.running.values())item.controller.abort()}
+ cancelCurrent(){this.frontier.cancel();this.assessController?.abort();for(const item of this.running.values())item.controller.abort()}
  stop(){this.stopping=true;this.cancelCurrent()}
 }

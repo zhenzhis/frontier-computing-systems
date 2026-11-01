@@ -4,6 +4,7 @@ import {projectPath,safeData} from './control.mjs';
 
 /** A fixed-role Pi executor. Authentication is resolved by the existing runtime, never copied. */
 export async function runModelRole({project,agentDir,provider,model,role,prompt,files=[],stateDir,signal,onUsage=()=>{},onProgress=()=>{},onSession=()=>{},contextRead}) {
+ if(signal?.aborted)throw Error('Execution cancelled before model initialization');
  const sdk=await import('@earendil-works/pi-coding-agent');
  const runtime=await sdk.ModelRuntime.create({authPath:path.join(agentDir,'auth.json'),modelsPath:path.join(agentDir,'models.json'),modelsStorePath:path.join(agentDir,'models-store.json'),allowModelNetwork:false,refreshOnCreate:false});
  const selected=runtime.getModel(provider,model);if(!selected)throw Error('Configured exact model is unavailable; no fallback');
