@@ -23,3 +23,43 @@ jobs:
       - run: npm run verify
       - run: npm run verify:sdk
       - run: node scripts/audit-public.mjs --history
+  release:
+    needs: verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: fcs-github-releases
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.12.0
+      - name: Publish the verified tag as a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$(git rev-parse "$tag^{commit}")" == "$GITHUB_SHA" ]]
+          [[ "$tag" == "$(node -p "'v' + require('./package.json').version")" ]]
+          if gh release view "$tag" --json isDraft,isPrerelease > "$RUNNER_TEMP/fcs-release.json"; then
+            node -e 'const r=JSON.parse(require("node:fs").readFileSync(process.argv[1]));if(r.isDraft||r.isPrerelease)throw Error("Existing release is not a published stable release; reconcile explicitly")' "$RUNNER_TEMP/fcs-release.json"
+          else
+            gh release create "$tag" --verify-tag --title "Frontier Computing Systems $tag" --generate-notes --latest=false
+          fi
+          # A delayed older tag must not replace a newer published release as Latest.
+          latest="$(gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" | node -e '
+            let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>{
+              const releases=JSON.parse(input).flat().filter(r=>!r.draft&&!r.prerelease&&/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(r.tag_name));
+              releases.sort((a,b)=>{const x=a.tag_name.slice(1).split(".").map(BigInt),y=b.tag_name.slice(1).split(".").map(BigInt);for(let i=0;i<3;i++){if(x[i]!==y[i])return x[i]>y[i]?-1:1}return 0});
+              if(!releases.length)throw Error("No published stable release");process.stdout.write(releases[0].tag_name);
+            });')"
+          gh release edit "$latest" --latest --verify-tag

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6 — 2026-11-01
+
+- Publish a GitHub Release after both platforms pass verification for an existing version tag. Repeated runs preserve existing published releases and select Latest by stable SemVer, so delayed older tags cannot downgrade it. This changes release automation and metadata; runtime behavior and personal configuration are unchanged.
+
 ## 0.4.5 — 2026-11-01
 
 - 在既有授权范围内修复内联上下文投影：runtime/superagent.mjs 的 fitInlineContext 现在只产出完整可解析 JSON 对象，并在收窄时把内容花在保留文本上（先选最宽形状，再用二分法求最长可容纳的保留 head），剩余预算以 JSON 不敏感的尾随空白补齐；context() 追加 contentChars 并保持 read/refs/chars/keptChars 语义。上一轮检查失败的原因已定位并修复：固定的回归用例断言收窄槽位的宽度恰好为 maxChars（78 !== 90），因此本轮既保留该宽度不变式（原 slice 行为本就始终返回 maxChars 字符），又新增可解析性与显式裁剪标记。runtime/superagent.test.mjs 中『assert.equal(c.text.length,90)』一项已按要求有意替换为『同宽度 + 单次可解析对象 + 显式 omitted/caps』并在注释中说明这是有意的行为变更；保留了修复前的 fragment 复现作为负证据；新增覆盖超长 mandate、超长 inputs 列表（多预算扫描）、极小预算与未超限零损失对照。docs/superagent.md 写明边界、标记语义、宽度填充、contentChars 与续读路径，并明确声明这是可解析性/保真修复，不构成 planner 准确性或任何能力改善的证据。
