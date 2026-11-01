@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "40e5045e7f8e30fd018c9220409ff570d2176d28e656483ffbc4aa5b6759dd9c"
+      "sha256": "051ce1c3dbbaf05fdae790bcd5ad11cdeaa7457ba6580012be6c0ff6966a3744"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -38,7 +38,7 @@
     },
     {
       "path": "docs/evaluation.md",
-      "sha256": "903e53599a05014779edccef2f7c2e9866ebbac1ca441a6f7c5bfbb83c9cd2f0"
+      "sha256": "4b8936ff5adda1f0480717816ced68008fc4077fbf0c11846e7baa09a6ca2a54"
     },
     {
       "path": "docs/installation.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "fdcc0b79f021cfd6dac76acd2b483f7f0624769ecb2c1a724b80dde0f1805b75"
+      "sha256": "7b4d0db9b51a811a1c7b76343fca43bf40b5fc7d3ae6519b8b64a15b1ea8b311"
     },
     {
       "path": "package.json",
-      "sha256": "c73b408ad3074a4f84f9936362d3bbf30e42c371902ac6ce2e8eb3805a5c3a4f"
+      "sha256": "053267b768e04527abbd9c6ee9dd7f60712e26334e55a9e8c7bb50b3b8aeafab"
     },
     {
       "path": "README.en.md",
@@ -234,7 +234,7 @@
     },
     {
       "path": "runtime/evaluation.mjs",
-      "sha256": "50e8fb7e33f8e48b3d99d9ba15dac2ade74914529901b8dcbdd940bd748bebe2"
+      "sha256": "cd5032b01f519bbcd6e9e4e91a5088e35fb41d14ee879718040b47bbbf0e52ee"
     },
     {
       "path": "runtime/feedback-core.mjs",
@@ -370,7 +370,7 @@
     },
     {
       "path": "tests/evaluation.test.mjs",
-      "sha256": "7e4f9ae7008b085b82a0455ed12c97659c228b4d71f121f24a29592b4b7b6cc3"
+      "sha256": "eaef876f5aab6f9f27453a7ae41f1c70866679621d9d415a6d0f99002e43e8af"
     },
     {
       "path": "tests/publication.test.mjs",

@@ -30,6 +30,8 @@ command 和 verify 均为 `{executable,args,cwd,timeoutMs}`，不经 shell 拼�
 
 command 是受信任的任务执行适配器，产生 outputFile；verify 是预先审查的外部验收器，检查实际产物并产生 assessmentFile。所有输出必须尚不存在、彼此唯一且不覆盖冻结输入；父目录先创建。assessmentFile 必须位于候选项目之外。默认不设置 OS 沙箱，不可用此入口执行任意不可信生成代码。正式模型任务须使用真正的隔离环境与网络策略；“外部路径”只是结构边界。
 
+report 集在冻结时强制验收入口位于候选工作项目之外：`verify.cwd` 必须给出且解析后不在候选项目内（省略即默认候选项目，因此被拒绝），`verify.executable` 解析后不得位于候选项目内；`verify.args` 中解析到候选项目内的路径（不论注册时是否已存在）只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。开发/选择集 trial 不受这条入口位置限制；项目外 oracle、assessmentFile、外部目录参数与标志位参数保持原用法。该检查基于参数解析后的路径位置，不做运行时重定向防护，也不解析 `-e` 等参数内联代码或字符串里的路径，不是 OS 沙箱，仍不能证明评分器语义正确或评审者独立。
+
 登记后从返回的 `evaluation.digest` 写出 request.json：
 
 ```json

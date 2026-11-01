@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 — 2026-11-01
+
+- 已完成本地候选（未推送、未建 PR、未改清单/版本/凭据），严格限于 runtime/evaluation.mjs、tests/evaluation.test.mjs、docs/evaluation.md、CHANGELOG.md。 完成： - runtime/evaluation.mjs：对 report 集 trial 在 freezeEvaluation/注册阶段强制验收入口在候选项目之外——verify.cwd 必须显式给出且解析后不在项目内；verify.executable 解析后不得在项目内；verify.args 解析到项目内的路径（含相对穿越、不论注册时是否存在）只允许该 trial 自己的 outputFile。开发/选择集、项目外 oracle/assessmentFile、外部目录与标志位参数不受影响。 - tests/evaluation.test.mjs：新增 3 个用例，实际测试 27→30、assert 48→58。负证据：修改前省略 cwd、cwd/executable 在项目内、args 绝对/相对引用项目文件的 5 种 report 形态均被接受；修改后均以明确错误拒绝，且无 experiment/reservation、无输出文件；开发集项目内验收入口仍可注册并实际执行。正例 fixture 仍通过。 - docs/evaluation.md 明确写出实际强制的边界及仍非 OS 沙箱、不证明评分器语义正确；CHANGELOG.md 的 Unreleased 记录缺陷、修复、断言数量与已知未覆盖形态（argv 内联代码、无运行时重定向防护）。 实际验证： - 修复前后复现脚本结果如上；node --test tests/evaluation.test.mjs：30 pass / 0 fail。 - 全仓 node --test runtime/*.test.mjs tests/*.test.mjs：158 tests，156 pass / 2 skip / 0 fail。 - npm run audit、node scripts/verify-links.mjs：通过（35 documents，failures []）。 - 隔离候选副本（排除 .git/.local，同版本依赖）以 verify-manifest --write 重建 116 文件后：npm run verify 退出 0（audit、links、158 tests、manifest 全绿）；npm run verify:sdk 退出 0，modelRequests:0。 剩余/边界：release-manifest.json、版本字段、精确提交 Windows/Linux CI 与 PR/发布由控制器负责，工作树清单未改；已知未覆盖为 verify.args 内联代码/字符串路径不解析、无运行时重定向防护。无本地阻塞。
+
 ## 0.4.1 — 2026-11-01
 
 - 在 runtime/autopilot.mjs 中把控制器版本所有权做成单一可复用条款，注入 planner 与 worker 指令，并在独立验证之前（而非之后）就拒绝版本漂移；新增三个测试（提示条款捕获、execute() 前置拒绝的负面证据、assertVersionOwnership 单元比对），并在 docs/superagent.md 增补一条可核对的、明确不作有效性宣称的陈述。未运行任何命令（无 shell），因此不声称测试或 verify/verify:sdk 通过；release-manifest.json 未刷新（不在我可写文件集内）。
@@ -53,6 +57,11 @@
 - Deliver assigned DSH source changes while discarding worker-generated release hashes; the supervisor remains responsible for regenerating the manifest.
 
 ## Unreleased
+
+- 修复 evaluation v2 report 集「独立验收」边界只落实一半的缺口（工程门禁，不构成能力或科学有效性主张）。旧 `freezeEvaluation` 只校验 `plan.verifierFiles` 与 report 集 `oracleFile` 不在候选项目内，而 `trial.verify.cwd` 省略时默认落到候选项目、`verify.executable` 只做哈希绑定、`verify.args` 完全不做路径检查；因此 report 集可以登记一个在候选项目内执行、且可由 worker 在 trial.command 阶段改写的评分器，验收证据可能退化为候选自评。现在在注册/冻结阶段对 report 集 trial 强制：`verify.cwd` 必须显式给出且解析后不在候选项目内；`verify.executable` 解析后不得位于候选项目内；`verify.args` 中解析到候选项目内的路径（含相对路径穿越，且不论注册时是否已存在）只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。开发/选择集 trial、项目外 oracle/assessmentFile、外部目录参数和标志位参数保持原行为。
+- 负证据与回归（可执行证据在 tests/evaluation.test.mjs）：修改前同一 fixture 的省略 cwd、cwd 在项目内、executable 在项目内、args 绝对路径引用项目文件、args 相对路径穿越项目文件五种 report 形态均被接受，开发集项目内验收入口也被接受；修改后前五种以及指向注册时尚不存在项目内路径的两种 args 形态均在 `freezeEvaluation` 抛错且不创建 experiment/reservation、不执行命令，开发集形态仍能注册并执行。用例 27→30、`assert` 断言 48→58；实际运行 `node --test tests/evaluation.test.mjs` 30 pass / 0 fail。
+- 仍未覆盖（保留）：`verify.args` 中 `-e` 等内联代码或字符串里的路径不被解析和拦截；检查基于参数解析后的路径位置，不做运行时重定向防护；该边界不是 OS 沙箱，也不证明评分器语义正确或评审者独立。
+- 本次执行状态与剩余：本地实际运行 `node --test tests/evaluation.test.mjs`（30 pass / 0 fail）、`node scripts/audit-public.mjs`、`node scripts/verify-links.mjs`、`node --test runtime/*.test.mjs tests/*.test.mjs`（158 tests，156 pass / 2 skip / 0 fail）；改动仅限 runtime/evaluation.mjs、tests/evaluation.test.mjs、docs/evaluation.md、CHANGELOG.md。在隔离候选副本（排除 `.git`/`.local`，以同版本依赖链接）中用 `verify-manifest --write` 重建 116 文件后，`npm run verify` 全链通过（audit、links、158 tests、manifest），`npm run verify:sdk` 通过且 modelRequests:0；控制器仍在精确提交上重建 release-manifest.json 并执行最终门禁。本 worker 未改 release-manifest.json、未改版本字段、未推送或建 PR。
 
 - 修复发布门禁 scripts/verify-links.mjs 对「带标题」与「尖括号目标」链接的静默跳过（工程校验缺陷，不涉及研究结论，本轮未声称科学结论，也不改变对外协议）。旧实现的 destination() 在目标内遇到任意空白字符就返回 null，scan() 随后执行 `if(open&&open.value)check(...)` 而跳过该链接：既不校验文件是否存在，也不产生任何 failure。CommonMark 合法的两类真实链接因此对门禁完全隐形：带双/单引号标题的 `[docs](missing.md "Title")`、`[docs](missing.md 'Title')`，以及尖括号包裹的含空格目标 `[docs](<missing dir/x.md>)`。这与上一轮已修复的徽章式嵌套链接外层目标同属一类假阴性：LICENSE、package.json 或任一篇文档被改名/移走时，links 环节仍可能全绿，而该环节是 scripts/release.mjs 在 --apply 前执行的发布前门禁。
 - 负证据（保留用例与前置说明）：可执行证据在 tests/verify-links.test.mjs 的三个新增用例——修复前对应 fixture 退出 0 且 failures 为 `[]`，修复后按期望退出 1 并报告去壳/去标题后的目标；目标文件真实存在时同一声明退出 0、failures `[]`。下面的围栏代码块只复述形状，代码块内的链接语法不是链接（verify-links 的既有语义），因此本文件自身不会制造新的门禁失败。

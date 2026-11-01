@@ -82,6 +82,16 @@ export function freezeEvaluation(project, plan, maxTrials) {
       outputs.add(identity);
     }
     requireValue(!inside(project, trial.assessmentFile), 'Assessment must be outside worker project');
+    if (cases.get(trial.caseId).split === 'report') {
+      requireValue(!inside(project, trial.verify.cwd), 'Report verifier cwd must be outside worker project');
+      requireValue(!inside(project, trial.verify.executable), 'Report verifier executable must be outside worker project');
+      const output = fileIdentity(trial.outputFile);
+      for (const arg of trial.verify.args) {
+        const candidate = path.resolve(trial.verify.cwd, arg);
+        const resolved = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
+        requireValue((!inside(project, candidate) && !inside(project, resolved)) || fileIdentity(candidate) === output || fileIdentity(resolved) === output, 'Report verifier args must stay outside worker project except the trial outputFile');
+      }
+    }
   }
   // Every registered case must be measured in every arm at the same repeats.
   for (const item of plan.cases) {
