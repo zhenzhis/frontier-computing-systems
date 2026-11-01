@@ -141,18 +141,70 @@ function labelEnd(text,start,limit){
  return -1;
 }
 
+// A destination has three shapes that must stay distinguishable: a plain path, an
+// angle-bracket path that may contain spaces, and either shape followed by a quoted
+// title. Returning null on the first whitespace, as the previous scan did, silently
+// treated `[docs](missing.md "Title")` and `[docs](<missing dir/x.md>)` as prose and
+// never checked their targets. A construct is only accepted when the destination and
+// optional title are closed by this link's `)`, so `[a](see the docs)` stays
+// unchecked instead of turning into a new false positive; unterminated constructs
+// still yield null, never an error.
+const horizontalSpace=/[ \t\r]/;
+
+// After a destination CommonMark permits whitespace and then a title in double or
+// single quotes, followed by whitespace and the closing `)`. `bareClose` also accepts
+// a plain `)` directly after an angle-bracket destination.
+function closeAfterDestination(text,index,limit,bareClose){
+ let i=index;
+ while(i<limit&&horizontalSpace.test(text[i]))i++;
+ if(i>=limit)return -1;
+ if(text[i]===')')return bareClose?i:-1;
+ const quote=text[i];
+ if(quote!=='"'&&quote!=="'")return -1;
+ for(i++;i<limit;i++){
+  if(escaped(text,i)){i++;continue;}
+  const ch=text[i];
+  if(ch==='\n')return -1;
+  if(ch!==quote)continue;
+  i++;
+  while(i<limit&&horizontalSpace.test(text[i]))i++;
+  return i<limit&&text[i]===')'?i:-1;
+ }
+ return -1;
+}
+
 // Depth-aware destination scan: `docs/a(b).md` ends at the `)` whose depth returns to
-// zero, so a real file name may contain parentheses. Whitespace before that point
-// means a title or an unterminated construct, which stays unchecked exactly as the
-// previous pattern left it; an unterminated destination yields null, never an error.
+// zero, so a real file name may contain parentheses. Whitespace at the top level is
+// only accepted when it introduces a quoted title; whitespace inside the destination
+// or content after a title that is not the closing `)` still yields null.
 function destination(text,open,limit){
+ if(open+1<limit&&text[open+1]==='<'){
+  for(let i=open+2;i<limit;i++){
+   if(escaped(text,i)){i++;continue;}
+   const ch=text[i];
+   if(ch==='\n'||ch==='<')return null;
+   if(ch==='>'){
+    const end=closeAfterDestination(text,i+1,limit,true);
+    if(end<0)return null;
+    return {end,value:text.slice(open+2,i)};
+   }
+  }
+  return null;
+ }
  let depth=0;
  for(let i=open;i<limit;i++){
   if(escaped(text,i)){i++;continue;}
   const ch=text[i];
   if(ch==='('){depth++;continue;}
-  if(ch===')'){depth--;if(depth===0)return {end:i,value:text.slice(open+1,i)};}
-  else if(/\s/.test(ch))return null;
+  if(ch===')'){depth--;if(depth===0)return {end:i,value:text.slice(open+1,i)};continue;}
+  if(ch==='\n')return null;
+  if(horizontalSpace.test(ch)){
+   if(depth!==1)return null;
+   const end=closeAfterDestination(text,i,limit,false);
+   if(end<0)return null;
+   return {end,value:text.slice(open+1,i)};
+  }
+  if(/\s/.test(ch))return null;
  }
  return null;
 }

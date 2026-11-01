@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10 — 2026-11-01
+
+- 已完成本地候选（仅工作树修改，未提交/推送/建 PR），严格限于 scripts/verify-links.mjs、tests/verify-links.test.mjs、CHANGELOG.md。 完成： - scripts/verify-links.mjs：destination() 现支持目标后的双/单引号标题，以及尖括号目标（保留内部空格、报告时去掉尖括号）；仅当目标/可选标题由本链接的 `)` 正常闭合时才校验，避免把 `[a](see the docs)` 这类散文变成误报；目标内空白、跨行目标、未闭合/多余内容仍返回 null 不抛错，既有输出契约与围栏/行内代码/锚点/编码/嵌套/平衡括号语义不变。 - tests/verify-links.test.mjs：用例 13 → 16。新增双/单引号标题缺失与存在、尖括号含空格目标（不存在报去壳路径、真实存在则通过）、链接状散文不校验且不吞后续真实链接；既有 13 个用例与严格原生路径断言全部保留。 - CHANGELOG.md：Unreleased 记录缺陷、修复、新用例数、未覆盖形态（引用式链接定义、HTML href/src、跨行目标、括号标题）及未声称科学结论。负证据置于围栏代码块，仓库自扫描未新增失败。 验证（本地实际执行）： - node scripts/verify-links.mjs：退出 0，documents 34，failures []。 - node --test tests/verify-links.test.mjs：16 pass / 0 fail。 - 全仓 node --test runtime/*.test.mjs tests/*.test.mjs：120 tests，118 pass / 2 skip / 0 fail。 - node scripts/audit-public.mjs：112 files，0 failures。 - 临时 fixture 复现修复前退出 0、修复后退出 1（failures 严格为去标题/去壳路径），目标真实存在时退出 0；stderr 为空。 剩余：控制器在隔离候选上执行 npm run verify、npm run verify:sdk（modelRequests:0）、用 verify-manifest --write 重建 release-manifest.json、精确提交 Windows/Linux CI 与发布。本地无待办，无阻塞。
+
 ## 0.3.9 — 2026-11-01
 
 - 修复 frozen-verify-links 失败：上一轮把徽章式嵌套链接的负证据写成了真实可见的 markdown 链接语法（CHANGELOG.md 中 img.svg×2、present.png），冻结门禁把它当真实链接扫描，导致仓库自身 verify-links 退出 1（failures 3 条，documents 34）。本轮只改 CHANGELOG.md：负证据移入围栏代码块，prose 不再含任何 [...]（...） 形状；代码块示例刻意只用真实存在或 external 目标（LICENSE、package.json、README.md、https://example.com/badge.svg），因此无论门禁是否剥离围栏/行内代码都不会再产生失败；负证据与前置说明仍保留在仓库中（prose 明示 fixture 形状与修复前后 0/1 的期望，可执行证据在 tests/verify-links.test.mjs）。scripts/verify-links.mjs 与 tests/verify-links.test.mjs 未再改动，其深度感知扫描（方括号深度定标签结尾、圆括号平衡定目标结尾、每层各校验一次、未闭合不抛错）与 13 个用例保持上一轮已通过的状态（隔离候选 npm test 117 pass / 0 fail，新脚本对仓库自身 documents 34 / failures []）。未增删任何 .md 文件，documents 基线仍为 34；未改 package.json/依赖、未改 release-manifest.json、未启用意图分流、未触碰凭据/Provider/权限/会话。
@@ -38,6 +42,28 @@
 - Deliver assigned DSH source changes while discarding worker-generated release hashes; the supervisor remains responsible for regenerating the manifest.
 
 ## Unreleased
+
+- 修复发布门禁 scripts/verify-links.mjs 对「带标题」与「尖括号目标」链接的静默跳过（工程校验缺陷，不涉及研究结论，本轮未声称科学结论，也不改变对外协议）。旧实现的 destination() 在目标内遇到任意空白字符就返回 null，scan() 随后执行 `if(open&&open.value)check(...)` 而跳过该链接：既不校验文件是否存在，也不产生任何 failure。CommonMark 合法的两类真实链接因此对门禁完全隐形：带双/单引号标题的 `[docs](missing.md "Title")`、`[docs](missing.md 'Title')`，以及尖括号包裹的含空格目标 `[docs](<missing dir/x.md>)`。这与上一轮已修复的徽章式嵌套链接外层目标同属一类假阴性：LICENSE、package.json 或任一篇文档被改名/移走时，links 环节仍可能全绿，而该环节是 scripts/release.mjs 在 --apply 前执行的发布前门禁。
+- 负证据（保留用例与前置说明）：可执行证据在 tests/verify-links.test.mjs 的三个新增用例——修复前对应 fixture 退出 0 且 failures 为 `[]`，修复后按期望退出 1 并报告去壳/去标题后的目标；目标文件真实存在时同一声明退出 0、failures `[]`。下面的围栏代码块只复述形状，代码块内的链接语法不是链接（verify-links 的既有语义），因此本文件自身不会制造新的门禁失败。
+
+```
+修复前，以下三行均被静默跳过（退出 0、failures []）：
+[docs](missing.md "Title")
+[docs](missing.md 'Title')
+[docs](<missing dir/x.md>)
+
+修复后：
+[docs](missing.md "Title")          → 退出 1，link 为 missing.md
+[docs](missing.md 'Title')          → 退出 1，link 为 missing.md
+[docs](<missing dir/x.md>)          → 退出 1，link 为去掉尖括号的 missing dir/x.md
+对应文件真实存在时同一声明退出 0、failures []。
+反向保护：[a](see the docs) 仍是散文，退出 0、failures []，不会被当成目标校验。
+```
+
+- 实现（scripts/verify-links.mjs）：destination() 现在接受以空白分隔的可选双/单引号标题，并在尖括号目标中保留空格、报告时去掉尖括号；只有目标（及可选标题）由本链接的 `)` 正常闭合时才返回构造，因此 `[a](see the docs)` 这类没有定界符标题的散文仍保持旧的「未校验即不报」语义。目标内空白、跨行目标、未闭合标题或标题后多余内容仍返回 null 而非抛错；围栏/行内代码、external/mailto、片段/锚点、编码、Windows 原生路径、徽章嵌套、平衡圆括号等既有语义与 `{passed,documents,failures}` 输出契约不变。
+- 测试（tests/verify-links.test.mjs）：用例数由 13 增至 16，新增三个用例——双/单引号标题下缺失目标报告且存在目标通过；尖括号含空格目标按去掉尖括号的真实路径校验（对应文件存在时通过）；无定界符标题的链接状散文保持不校验且不吞掉后续真实链接。既有 13 个用例全部保留，失败断言仍以 path.relative 原生相对路径严格相等，未放宽。
+- 仍未覆盖的形态（保留的负证据）：引用式链接定义（`[ref]: path`）、原始 HTML 的 href/src、目标跨行换行；本轮也只处理双/单引号标题，未纳入括号标题。这些形态不在本次范围内，避免一次改动覆盖过多语法而产生误报。
+- 执行状态：本 worker 在本地 checkout 实际运行 `node --test tests/verify-links.test.mjs`（16 pass / 0 fail）、全仓 `node --test runtime/*.test.mjs tests/*.test.mjs`（120 tests，118 pass / 2 skip / 0 fail）、`node scripts/audit-public.mjs`（112 files，0 failures）与 `node scripts/verify-links.mjs`（退出 0、documents 34、failures []），并用临时 fixture 复现修复前退出 0、修复后退出 1 及目标存在时退出 0；`npm run verify`、`npm run verify:sdk`（modelRequests:0）以及 Windows/Linux 精确提交 CI 由控制器在隔离候选上执行。改动仅限 scripts/verify-links.mjs、tests/verify-links.test.mjs、CHANGELOG.md；未改 package.json/依赖、未改 release-manifest.json（由控制器用 verify-manifest --write 重建）、未启用意图分流、未触碰凭据/Provider/权限/会话。
 
 - 修复发布门禁 scripts/verify-links.mjs 对「徽章式嵌套链接」外层目标的假阴性（工程校验缺陷，不涉及研究结论，也不改变对外协议）。旧实现用单条正则扫描链接，该正则的标签部分不允许嵌套方括号：对「链接文字本身就是一个内联图片」的徽章写法，它先匹配到内层图片并在内层右括号处结束，剩下的那段以右方括号加圆括号开头、前面已经没有左方括号，因此**外层目标完全不被校验**。README 第 7–9 行三个徽章正是这种形状，其外层相对目标 `package.json`、`LICENSE`（以及 Verify 徽章的外层 workflow URL）都落在这个盲区里：`npm run verify` 的 links 环节会对这一类真实断链给出绿色通过，即使 `LICENSE` 或 `package.json` 被改名/移走也不会报错。这与 0.3.8 已建立的目标（锚点与相对链接必须可验证）直接矛盾。
 - 负证据（保留用例与前置说明）：可执行证据在 tests/verify-links.test.mjs 的徽章用例——fixture 用内联图片充当链接文字，内层图片文件存在、外层目标 `missing-outer.md` 不存在（`present.png` 存在）；修复前该 fixture 退出 0 且 failures 为 `[]`，修复后退出 1 且 failures 恰为一条、link 为 `missing-outer.md`、file 为原生相对路径，内层图片不再重复报错。下面的围栏代码块只复述形状，且刻意只用本仓库真实存在或 external 的目标，因为代码块内的链接语法不是链接（这既是 verify-links 的既有语义，也保证本文件自身不会制造新的门禁失败）。
