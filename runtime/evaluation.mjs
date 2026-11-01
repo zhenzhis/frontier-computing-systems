@@ -86,10 +86,15 @@ export function freezeEvaluation(project, plan, maxTrials) {
       requireValue(!inside(project, trial.verify.cwd), 'Report verifier cwd must be outside worker project');
       requireValue(!inside(project, trial.verify.executable), 'Report verifier executable must be outside worker project');
       const output = fileIdentity(trial.outputFile);
-      for (const arg of trial.verify.args) {
-        const candidate = path.resolve(trial.verify.cwd, arg);
+      const allowed = file => {
+        const candidate = path.resolve(trial.verify.cwd, file);
         const resolved = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
-        requireValue((!inside(project, candidate) && !inside(project, resolved)) || fileIdentity(candidate) === output || fileIdentity(resolved) === output, 'Report verifier args must stay outside worker project except the trial outputFile');
+        return (!inside(project, candidate) && !inside(project, resolved)) || fileIdentity(candidate) === output || fileIdentity(resolved) === output;
+      };
+      for (const arg of trial.verify.args) {
+        requireValue(allowed(arg), 'Report verifier args must stay outside worker project except the trial outputFile');
+        // An attached value (`--flag=value`) names a path just as a standalone argument does.
+        if (arg.startsWith('-') && arg.includes('=')) requireValue(allowed(arg.slice(arg.indexOf('=') + 1)), 'Report verifier args must stay outside worker project except the trial outputFile');
       }
     }
   }

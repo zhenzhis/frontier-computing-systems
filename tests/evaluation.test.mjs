@@ -74,6 +74,23 @@ test('report verifier args may only reference the trial output inside the projec
   trial.verify.args = ['--strict', ...original]; const experiment = f.register();
   assert(experiment.evaluation.plan.trials[0].verify.args.includes('--strict')); assert(experiment.evaluation.plan.trials[0].verify.args.includes(trial.outputFile));
 });
+test('report verifier attached flag values inside the project are refused before reservation', async () => {
+  // Negative evidence: on 020a470c (before attached values were path-checked) both forms below
+  // registered successfully and created the experiment record; reproduce by reverting only
+  // runtime/evaluation.mjs on this commit.
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0];
+  const local = path.join(f.project, 'answers.json'); fs.writeFileSync(local, '{"total":32}\n');
+  trial.verify.args = ['--oracle=' + local]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  trial.verify.args = ['--config=' + path.relative(f.verifier, path.join(f.project, 'expected.json'))]; assert.throws(f.register, /must stay outside worker project except the trial outputFile/);
+  assert.equal(f.store.read().experiments.fixture, undefined); assert.equal(fs.existsSync(trial.outputFile), false); assert.equal(fs.existsSync(trial.assessmentFile), false);
+});
+test('report verifier attached flag values outside the project or naming the trial output stay accepted', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0], original = trial.verify.args;
+  const external = path.join(f.verifier, 'oracle-extra.json'); fs.writeFileSync(external, '{"total":32}\n');
+  const args = ['--oracle=' + external, '--out=' + trial.outputFile, '--strict', ...original];
+  trial.verify.args = args; const experiment = f.register();
+  assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
+});
 test('development and selection trials may keep a project-local verifier', async () => {
   for (const split of ['development', 'selection']) {
     const f = await evaluationFixture(); const plan = f.registration.evaluation, trial = plan.trials[0], local = path.join(f.project, 'local-grader.cjs');
