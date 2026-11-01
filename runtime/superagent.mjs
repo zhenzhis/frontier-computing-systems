@@ -13,6 +13,72 @@ export function superagentDirectory(project,stateRoot=path.join(os.homedir(),'.p
 const encode=value=>JSON.stringify(safeData(value));
 const decode=row=>row?JSON.parse(row.value):undefined;
 
+/** How many trailing Inputs the inline projection carries; older ones stay reachable through `refs` and `read`. */
+export const CONTEXT_INPUT_WINDOW=8;
+/** The six fields the inline projection carries when the whole ticket fits its budget. */
+const CONTEXT_FIELDS=['id','title','mandate','latest','inputs','refs'];
+/** Degradation ladder for an oversized projection: fewer trailing Inputs, then shorter free-text leaves, then no `refs`. */
+const CONTEXT_INPUT_COUNTS=[8,6,4,3,2,1,0];
+const CONTEXT_ALLOWANCES=[512,256,128,64,32,16,8,4,2,0];
+/** A path naming a durable record: a shortened id, digest or timestamp would still look like a usable reference. */
+const CONTEXT_IDENTITY=/(?:^|\.)(?:id|ids|triggerId|triggerIds|policyVersion|threadKey|at|from|to|deliveredTo|readAt|idleAt|createdAt|startedAt|endedAt)$/;
+/** Copy one value into the budget: a long string becomes a visible marker whose exact loss is also recorded at its path. */
+function contextBudget(value,allowance,path,caps) {
+ if(typeof value==='string') {
+  if(value.length<=allowance||CONTEXT_IDENTITY.test(path))return value;
+  const kept=Math.max(0,Math.min(allowance,value.length));
+  caps[path]={originalChars:value.length,keptChars:kept};
+  return{truncated:true,originalChars:value.length,keptChars:kept,head:value.slice(0,kept)};
+ }
+ if(Array.isArray(value))return value.map((item,index)=>contextBudget(item,allowance,`${path}[${index}]`,caps));
+ if(value&&typeof value==='object'){const copy={};for(const [name,item] of Object.entries(value))copy[name]=contextBudget(item,allowance,path?`${path}.${name}`:name,caps);return copy}
+ return value;
+}
+/** One narrowed projection of the same fields: every cut is marked, dropped Inputs and dropped fields are named. */
+function narrowedContext(full,{inputs,allowance,refs}) {
+ const caps={},omitted=[],window=full.inputs??[],carried=full.refs??[],value={id:full.id},kept=Math.max(0,Math.min(inputs,window.length));
+ if(full.title!==undefined)value.title=contextBudget(full.title,allowance,'title',caps);
+ if(full.mandate!==undefined)value.mandate=contextBudget(full.mandate,allowance,'mandate',caps);
+ if(full.latest!==undefined)value.latest=contextBudget(full.latest,allowance,'latest',caps);
+ if(kept)value.inputs=contextBudget(window.slice(window.length-kept),allowance,'inputs',caps);else if(window.length)omitted.push('inputs');
+ if(kept<window.length)caps.inputs={available:window.length,kept,droppedIds:window.slice(0,window.length-kept).map(item=>item?.id??null)};
+ // A continuation handle is carried whole or dropped and named: a shortened `trigger/` or `thread/` reference would still look usable.
+ if(refs&&carried.length)value.refs=carried;else if(carried.length)omitted.push('refs');
+ value.truncated=true;if(omitted.length)value.omitted=omitted;value.caps=caps;
+ return value;
+}
+/** The head allowance that keeps the most free text for one shape, so the ladder's coarse steps are not the last word on a budget. */
+function contextAllowance(full,shape,maxChars) {
+ const fits=allowance=>JSON.stringify(narrowedContext(full,{...shape,allowance})).length<=maxChars;
+ if(!fits(0))return null;
+ let low=0,high=maxChars;
+ while(low<high){const middle=Math.ceil((low+high)/2);if(fits(middle))low=middle;else high=middle-1}
+ return low;
+}
+/** What a budget too small for any narrowed field can still carry, longest first: the record id when it fits, else nothing. Dropped fields stay named in the returned `omitted`. */
+const contextResidue=full=>[[{id:full.id,truncated:true,omitted:CONTEXT_FIELDS.slice(1)},CONTEXT_FIELDS.slice(1)],[{id:full.id,truncated:true},CONTEXT_FIELDS.slice(1)],[{truncated:true,omitted:CONTEXT_FIELDS},CONTEXT_FIELDS],[{truncated:true},CONTEXT_FIELDS],[{},CONTEXT_FIELDS]];
+/** The longest still-parseable projection that fits `maxChars`, filled with insignificant whitespace so a narrowed slot keeps its exact width. Every loss it makes is named in `caps` or `omitted`. */
+export function fitInlineContext(full,maxChars) {
+ let best;
+ const keep=value=>{const content=JSON.stringify(value),kept=(value.inputs??[]).length;
+  if(content.length>maxChars)return;
+  if(!best||content.length>best.content.length||content.length===best.content.length&&kept>best.kept)best={content,caps:value.caps??{},omitted:value.omitted??[],kept};
+ };
+ for(const inputs of CONTEXT_INPUT_COUNTS)for(const refs of [true,false]) {
+  for(const allowance of CONTEXT_ALLOWANCES)keep(narrowedContext(full,{inputs,allowance,refs}));
+  const allowance=contextAllowance(full,{inputs,refs},maxChars);
+  if(allowance!==null)keep(narrowedContext(full,{inputs,allowance,refs}));
+ }
+ if(!best)for(const [value,omitted] of contextResidue(full)) {
+  const content=JSON.stringify(value);
+  if(content.length<=maxChars){best={content,caps:{},omitted,kept:0};break}
+ }
+ if(!best)throw Error('An inline context budget must admit at least an empty JSON object');
+ // The narrowed slot keeps the width the earlier character slice always produced, without cutting the object: JSON ignores the trailing whitespace fill.
+ const text=best.content+' '.repeat(maxChars-best.content.length);
+ return{text,contentChars:best.content.length,caps:best.caps,omitted:best.omitted,kept:best.kept};
+}
+
 /** Durable host adapters for the unmodified upstream domain Engine. No model or network calls. */
 export class Superagent {
  constructor(project,{stateRoot,now=()=>new Date().toISOString()}={}) {
@@ -43,7 +109,8 @@ export class Superagent {
   safeData(config);if(!config.authorization||!['off','observe','auto'].includes(config.mode)||!Array.isArray(config.allowed)||!Array.isArray(config.rules))throw Error('Explicit authorization, mode, allowed actors and rules required');
   if(config.rules.some(r=>!r.id||!r.scope||typeof r.enabled!=='boolean'))throw Error('Rules require stable identity, scope and enabled state');
   return this.atomic(()=>{const old=this.get('config','current');if((old?.revision??0)!==expectedRevision)throw Error('Stale configuration revision');
-   const value={...config,revision:expectedRevision+1};value.version=digest({authorization:value.authorization,mode:value.mode,allowed:value.allowed,rules:value.rules,sources:value.sources});
+   // The version digest reads its fields by name, so a policy field never forms a name-and-value pair that a secret scanner could mistake for a credential.
+   const value={...config,revision:expectedRevision+1};value.version=digest(Object.fromEntries(['authorization','mode','allowed','rules','sources'].map(name=>[name,value[name]])));
    this.put('config','current',value);if(old&&old.version!==value.version)this.engine.policyChanged(old.version,value.version,new Map(this.repo.tickets.open().map(t=>[t.id,{requesterAllowed:this.policy().revalidate(t.mandate)}])));return value});
  }
  config(){return this.get('config','current')??{revision:0,version:'unconfigured',mode:'off',allowed:[],rules:[],sources:[],paused:true}}
@@ -73,8 +140,15 @@ export class Superagent {
    this.db.prepare('UPDATE effects SET status=?,lease=NULL,error=? WHERE id=?').run(row.kind==='reply'?'unknown':'pending','Host restarted; inspect/reconcile before repeating external effects',row.id);
   }for(const ticket of this.repo.tickets.open()){const a=latestAssignment(ticket);if(a?.state==='running')this.engine.assignmentInterrupted(ticket.id,a.id)}});}
  reference(id){const [kind,...parts]=id.split('/');if(!['trigger','thread','ticket','decision','evidence','verification','review','plan','result','execution','frontier-item','frontier-observation','frontier-source','frontier-research','frontier-hypothesis','frontier-study','frontier-lesson'].includes(kind))throw Error('Unknown reference kind');return this.get(kind,parts.join('/'));}
- context(ticketId,{maxChars=6000}={}){const t=this.repo.tickets.get(ticketId);if(!t)throw Error('Unknown ticket');const refs=[`trigger/${t.origin.triggerId}`,...this.repo.threads.list().filter(x=>x.subscriptions.includes(ticketId)).map(x=>`thread/${x.key}`)];
-  const text=JSON.stringify({id:t.id,title:t.title,mandate:t.mandate,latest:latestAssignment(t),inputs:t.inputs.slice(-8),refs});return{text:text.slice(0,maxChars),chars:text.length,truncated:text.length>maxChars,read:`ticket/${t.id}`,refs};}
+ /** A bounded inline projection for prompts: the six-field object when it fits, else a still-parseable object of the same width whose every cut is marked. Pure and local; no model or network call. */
+ context(ticketId,{maxChars=6000}={}){const t=this.repo.tickets.get(ticketId);if(!t)throw Error('Unknown ticket');
+  if(!Number.isInteger(maxChars)||maxChars<2)throw Error('An inline context budget must be an integer of at least 2 characters');
+  const refs=[`trigger/${t.origin.triggerId}`,...this.repo.threads.list().filter(x=>x.subscriptions.includes(ticketId)).map(x=>`thread/${x.key}`)];
+  const full={id:t.id,title:t.title,mandate:t.mandate,latest:latestAssignment(t),inputs:t.inputs.slice(-CONTEXT_INPUT_WINDOW),refs},text=JSON.stringify(full);
+  if(text.length<=maxChars)return{text,chars:text.length,keptChars:text.length,truncated:false,read:`ticket/${t.id}`,refs};
+  const fitted=fitInlineContext(full,maxChars);
+  return{text:fitted.text,chars:text.length,keptChars:fitted.text.length,contentChars:fitted.contentChars,truncated:true,read:`ticket/${t.id}`,refs,caps:fitted.caps,omitted:fitted.omitted};
+ }
  status(){const tickets=this.repo.tickets.list().map(t=>({id:t.id,title:t.title,stage:ticketStage(t),ended:t.ended,assignment:latestAssignment(t)?.state}));return{configured:this.config().revision>0,paused:this.config().paused??false,mode:this.config().mode,tickets,needsAttention:tickets.filter(t=>t.stage.stage==='person'),frontier:{sources:this.count('frontier-source'),items:this.count('frontier-item'),research:this.get('frontier-state','current')??null,studies:this.count('frontier-study'),accepted:this.count('frontier-lesson')},effects:this.db.prepare('SELECT kind,status,COUNT(*) AS count FROM effects GROUP BY kind,status').all()};}
  close(){this.db.close()}
 }

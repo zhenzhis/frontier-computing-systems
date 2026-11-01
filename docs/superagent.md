@@ -10,6 +10,21 @@ There are two execution paths: a native Pi executor and a separately deployed of
 
 The default state root is `~/.pi/fcs-superagent-state`, separate from legacy workflow state. Native status does not create an absent database. Existing workflow records and runtime identifiers are preserved.
 
+## Inline context projection
+
+`context(ticket,{maxChars})` is a pure, local, synchronous read of one ticket that places bounded context in a prompt; it makes no model and no network call. When the six-field projection (`id`, `title`, `mandate`, `latest`, the last eight `inputs`, and `refs`) fits `maxChars`, the returned text is exactly that serialized object and nothing is lost. When it does not fit, the text is still one complete, parseable JSON object within the budget, and each loss is visible instead of being a cut piece of a longer string:
+
+- a shortened free-text value becomes `{"truncated":true,"originalChars":N,"keptChars":M,"head":"…"}`, and `caps[path]` repeats the same counts for that field path, such as `mandate.scope`, `latest.report.summary` or `inputs[3].text`;
+- trailing Inputs left out of the inline window are reported in `caps.inputs` with the available count, the kept count and the dropped ids, and the kept Inputs always remain a suffix of that window in their original order;
+- whole fields left out are named in `omitted`, for example `["id","title","mandate","latest","inputs","refs"]` under a budget that admits no field at all, or the five other fields when the budget still carries the record `id` alone;
+- `refs` entries and record identifiers such as `id`, `triggerId` and `policyVersion` are never shortened, because a truncated handle would still look like a valid reference: they are either carried whole or omitted and named.
+
+The narrowed slot still fills its whole budget. The budget is spent on retained content first: the projection takes the widest shape that still fits, then the longest free-text heads, so fewer trailing Inputs are dropped and fewer strings are shortened as the budget grows. Whatever is left of the budget becomes insignificant trailing whitespace after the object, which `JSON.parse` ignores; the payload stays parseable and the inline slot keeps the exact width the earlier character slice always produced. `keptChars` is the length of the returned text, `contentChars` the length of the object itself, and `chars` the length before narrowing, so a caller that cares about payload size reads `contentChars`, `caps` and `omitted` rather than the width of the slot.
+
+The budget bounds the payload, not the protocol. `read` is always `ticket/<id>`, and the returned `refs` still carry the origin `trigger/` reference and every subscribed `thread/` key even when the text omits them, so continuation stays `context` → `refs`/`read` → reread or expand a reference. A budget below two characters cannot hold any JSON object, so it is refused explicitly instead of returning a fragment.
+
+This is a parseability and fidelity repair of the inline payload. The earlier implementation sliced the serialized projection at the character budget, so an oversized ticket produced a fragment; `runtime/superagent.test.mjs` keeps that reproduction as retained failure evidence instead of deleting it, and its earlier exact-length assertion now requires that same width together with one parseable object and named losses. The repair is not evidence of better planner accuracy, of any capability gain, or of fewer failures in production: each of those would need its own frozen evaluation.
+
 ## Explicit activation
 
 Installation and reading records do not start a model, poll a remote service or activate a worker. Configure and start an independent service explicitly:
