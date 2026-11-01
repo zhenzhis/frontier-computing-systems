@@ -33,19 +33,86 @@ function withoutInlineCode(source){
  return source.replace(/(?<!`)(`+)(?!`)([\s\S]*?)(?<!`)\1(?!`)/g,match=>match.replace(/[^\n]/g,' '));
 }
 
+// GitHub derives a heading anchor from its rendered text: lower case, whitespace
+// as hyphens, punctuation and emphasis markers dropped, while inline code, link
+// labels and CJK characters keep their text. Repeated headings get -1, -2, ...
+function slugify(text){
+ return text
+  .toLowerCase()
+  .replace(/!\[([^\]]*)\]\([^)]*\)/g,'$1')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g,'$1')
+  .replace(/<[^>]*>/g,'')
+  .replace(/`+([^`]*)`+/g,'$1')
+  .replace(/[*_~]/g,'')
+  .replace(/[^\p{L}\p{N}\p{M}\s_-]/gu,'')
+  .trim()
+  .replace(/\s+/g,'-');
+}
+
+// Headings outside fences provide implicit anchors; explicit id="..." attributes
+// and <a name="..."> elements provide additional anchors anywhere in the document.
+function collectAnchors(source){
+ const body=withoutFences(source),anchors=new Set(),seen=new Map();
+ for(const line of body.split('\n')){
+  const heading=/^(?: {0,3}>[ \t]?)* {0,3}#{1,6}(?:[ \t]+(.*?))?[ \t]*$/.exec(line);
+  if(!heading)continue;
+  const base=slugify((heading[1]??'').replace(/[ \t]+#+[ \t]*$/,''));
+  if(!base)continue;
+  let suffix=seen.get(base)??0,slug=base;
+  while(anchors.has(slug)){suffix++;slug=`${base}-${suffix}`;}
+  seen.set(base,suffix);
+  anchors.add(slug);
+ }
+ const markup=withoutInlineCode(body);
+ for(const match of markup.matchAll(/<[a-z][^>]*\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi)){
+  const value=match[1]??match[2]??match[3];
+  if(value)anchors.add(value);
+ }
+ for(const match of markup.matchAll(/<a\b[^>]*\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi)){
+  const value=match[1]??match[2]??match[3];
+  if(value)anchors.add(value);
+ }
+ return anchors;
+}
+
+const anchorCache=new Map();
+const documentAnchors=file=>{
+ if(!anchorCache.has(file))anchorCache.set(file,collectAnchors(fs.readFileSync(file,'utf8')));
+ return anchorCache.get(file);
+};
+
+// Fragments may be written literally or percent-encoded; both name the same anchor.
+const hasAnchor=(file,fragment)=>{
+ const anchors=documentAnchors(file);
+ if(anchors.has(fragment))return true;
+ try{return anchors.has(decodeURIComponent(fragment));}catch{return false;}
+};
+
 function scan(file,source){
  for(const [,link] of source.matchAll(/\[[^\]]*\]\(([^\s)]+)\)/g)){
-  if(/^(?:https?:|mailto:|#)/.test(link))continue;
-  const raw=link.split('#')[0];
+  if(/^(?:https?:|mailto:)/.test(link))continue;
+  const hash=link.indexOf('#');
+  const raw=hash<0?link:link.slice(0,hash);
+  const fragment=hash<0?null:link.slice(hash+1);
   let target;
   try{
-   target=path.resolve(path.dirname(file),decodeURIComponent(raw));
+   target=raw?path.resolve(path.dirname(file),decodeURIComponent(raw)):file;
   }catch{
    // A malformed percent escape must remain a report field, never an uncaught URIError.
    failures.push({file:path.relative(root,file),link,reason:'undecodable-link'});
    continue;
   }
-  if(!fs.existsSync(target))failures.push({file:path.relative(root,file),link});
+  if(!raw){
+   // A same-document fragment never needs a file existence check.
+   if(fragment&&!hasAnchor(file,fragment))failures.push({file:path.relative(root,file),link,reason:'missing-anchor'});
+   continue;
+  }
+  if(!fs.existsSync(target)){
+   failures.push({file:path.relative(root,file),link});
+   continue;
+  }
+  // Only markdown files define anchors; a fragment on any other target stays unvalidated.
+  if(fragment&&/\.md$/i.test(target)&&fs.statSync(target).isFile()&&!hasAnchor(target,fragment))failures.push({file:path.relative(root,file),link,reason:'missing-anchor'});
  }
 }
 

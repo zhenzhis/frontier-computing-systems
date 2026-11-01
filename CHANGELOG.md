@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8 — 2026-11-01
+
+- 已完成本地候选，未 push / 未建 PR / 未改 release-manifest.json。 完成内容： - scripts/verify-links.mjs：新增锚点收集与片段校验。GitHub 风格 heading slug（小写、空白转 '-'、去标点与强调标记、保留 inline code 与链接文字、重复标题 -1/-2、CJK 保留、冲突避让）；收集显式 id="..." 与 <a name="...">。同文档 #fragment 与跨文档 .md#fragment 均校验，失败为 reason:'missing-anchor'；目标文件不存在仍保持既有 {file,link} 形态；非 .md 目标不校验片段；兼容百分号编码片段。http/https/mailto、围栏/行内代码、undecodable-link、path.relative 原生路径等既有行为不变。 - tests/verify-links.test.mjs：原“片段链接被忽略”用例改写为锚点校验用例（有意行为变更，测试内注释已说明），并新增跨文档片段、slug 归一化（含 CJK/编码）、显式 id/name 锚点用例；保留非 .md 文件不被扫描的断言。 实际验证： - checkout：node scripts/verify-links.mjs 通过，documents 34，failures []；README #getting-started/#documentation 被真实解析；npm run audit 通过；npm test 111 pass / 2 skip / 0 fail；verify-links 测试文件 9/9。 - 精确候选副本用 verify-manifest --write 重建清单后：npm run verify 通过（audit、links、全部测试、manifest 111 files 全绿）；npm run verify:sdk 通过，modelRequests:0。 - README 锚点探针：临时把 “Getting started” 改名后 #getting-started 报 missing-anchor，未改名不报，确认非跳过。 - 现有文档未发现真实断锚，无负证据需要列出。 Remaining：控制器独立校验、按流程重建 release-manifest.json、精确提交 CI 与发布；本地无其他待办。
+
 ## 0.3.7 — 2026-11-01
 
 - 为 assess 路径加入有界重试与终态结算。runtime/autopilot.mjs：新增导出的 ASSESS_ATTEMPTS=3 与 assessmentFailure 分类器；assess() 先校验 effect 仍持有的 Eval（stale 立即终止、不调模型），并把『无决定/批覆盖不全/checkedPlan 拒绝』分类为 assessment-invalid 且携带被拒决定摘要（kind/title/files/digest）；tick() 的失败处理改为 fail(kind,effect,error)：assess 前 2 次按现有 settle 退避回到 pending 并记录 {reason,attempt}，第 3 次（或 terminal 错误）进入 rejectAssessment——若该 Eval 仍持有 trigger，则写入显式 ignore 决定（audit.reason=assessment-attempts-exhausted/rejected/attempts/effectId），若已被取代/不可用则只留证据，然后以 settle(effect) 无错结算为 status='done'，因此不再被 claim、不再重复消耗模型调用；launch/input 等其它 effect 的重试语义保持不变。runtime/autopilot.test.mjs：新增两个 fixture 级用例（无效路由决定、瞬时异常），断言 router 恰好 3 次调用、attempts 递增、第 3 次 done、再 tick 不再调用、failure 证据含稳定 reason 与被拒决定摘要、trigger 得到 ignore 决定且可从 list('decision')/disposition/status().effects 观察、未创建 ticket/plan/result、未 publish。本路由无 shell，未运行任何命令；全部可执行验收与冻结检查留待控制器。
