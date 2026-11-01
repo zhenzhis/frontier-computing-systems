@@ -119,6 +119,37 @@ test('a task adapter cannot supply the assessment before external verification',
   assert.throws(f.review, /Incomplete frozen trial manifest/);
   assert.equal(fs.readFileSync(trial.assessmentFile, 'utf8'), forged);
 });
+test('a read-only external verifier keeps the candidate artifact valid', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0], oracle = f.registration.evaluation.cases[0].oracleFile;
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [oracle,output,assessment]=process.argv.slice(-3);const actual=JSON.parse(fs.readFileSync(output,'utf8'));const expected=JSON.parse(fs.readFileSync(oracle,'utf8'));fs.writeFileSync(assessment,JSON.stringify({taskOutcome:actual.total===expected.total?'passed':'failed',hardConstraintsPassed:true}));", oracle, trial.outputFile, trial.assessmentFile];
+  f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(row.validity, 'valid'); assert.equal(row.taskOutcome, 'passed'); assert.equal(row.hardConstraintsPassed, true);
+  assert.equal(row.verification.outcome, 'passed'); assert.equal(row.verification.error, null);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile)); assert.equal(result.summary.eligible, true);
+  assert.equal(f.review().status, 'reviewed-for-adoption');
+});
+// Negative evidence: before the runner snapshotted outputFile across verification, this fixture was
+// recorded as valid/passed and reached review even though the verifier appended a byte and supplied
+// the passing assessment itself. Reproduce by reverting only runtime/evaluation-runner.mjs.
+test('an artifact rewritten during external verification is invalid and stops later trials', async () => {
+  const f = await evaluationFixture(); const trials = f.registration.evaluation.trials;
+  const mutation = "const fs=require('node:fs');const [output,assessment]=process.argv.slice(-2);fs.appendFileSync(output,Buffer.from([32]));fs.writeFileSync(assessment,JSON.stringify({taskOutcome:'passed',hardConstraintsPassed:true,validity:'valid'}));";
+  trials[0].verify.args = ['-e', mutation, trials[0].outputFile, trials[0].assessmentFile];
+  f.register(); const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'output-modified-during-verification');
+  assert.notEqual(row.verification.outputBeforeSha256, row.verification.outputAfterSha256);
+  assert.equal(row.verification.outputAfterSha256, artifactHash(trials[0].outputFile)); assert.equal(row.output.sha256, artifactHash(trials[0].outputFile));
+  assert.match(row.invalidReason, /modified during external verification/);
+  assert(row.invalidReason.includes(row.verification.outputBeforeSha256)); assert(row.invalidReason.includes(row.verification.outputAfterSha256));
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[0].outputFile), true); assert.equal(fs.existsSync(trials[1].outputFile), false);
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.throws(f.review, /Incomplete frozen trial manifest/);
+});
 test('valid semantic failure is retained despite process and grader success', async () => {
   const f = await evaluationFixture({ candidatePass: false }); f.register(); const run = f.run(); assert.equal(run.status, 1);
   const row = JSON.parse(run.stdout).runs.find(row => row.arm === 'candidate'); assert.equal(row.execution.outcome, 'passed'); assert.equal(row.verification.outcome, 'passed'); assert.equal(row.validity, 'valid'); assert.equal(row.taskOutcome, 'failed'); assert.throws(f.review, /Regression/);
