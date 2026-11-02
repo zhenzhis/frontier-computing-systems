@@ -1,5 +1,6 @@
 import path from 'node:path';
 import {projectPath} from './control.mjs';
+import {samePath} from './path-scope.mjs';
 export function workerPolicy(project,task) {
   const allowed=new Set(task.stage==='implement'&&task.authority.actions.includes('write')?['read','grep','find','ls','edit','write']:['read','grep','find','ls']);
   const guard=event=>{
@@ -8,7 +9,7 @@ export function workerPolicy(project,task) {
     try {
       const relative=path.isAbsolute(target)?path.relative(project,target):target;
       projectPath(project,relative);
-      if(['edit','write'].includes(event.toolName)&&!Object.keys(task.baseline).some(f=>path.resolve(project,f).toLowerCase()===path.resolve(project,relative).toLowerCase()))return {block:true,reason:'Worker write outside exact assigned files refused'};
+      if(['edit','write'].includes(event.toolName)&&!Object.keys(task.baseline).some(f=>samePath(path.resolve(project,f),path.resolve(project,relative))))return {block:true,reason:'Worker write outside exact assigned files refused'};
     }catch{return {block:true,reason:'Worker file access outside assigned project refused'};}
   };
   return {allowed,guard,factory:pi=>pi.on('tool_call',guard)};

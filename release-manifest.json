@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.8",
+  "version": "0.4.9",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "f7dba29467424fe865febc8ae2ae311c96ce915a6241a556d0da6236a554ae5d"
+      "sha256": "3b68ef6c6f6559a9098ff0eb4d4fcee4951c60323b41bb1858f63559b1d27899"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -30,7 +30,7 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "7c63c594e6683535822214bccc64c92f47d3ae5320ab47e834658f9c5a3c48ee"
+      "sha256": "94221dcce2f63f4c0dc9ed978f1122f26d524f37a5ad751623ffa941ded74c1c"
     },
     {
       "path": "docs/decisions/0001-public-project.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "26b5afc414d17bb4df7367c5db8854f7bae0af30cc9c178c5cce421afd362342"
+      "sha256": "3030112645d9e1b4517ae34a66f5f696dc10443ea8b84af034b34b6fa0dfc7a1"
     },
     {
       "path": "package.json",
-      "sha256": "0b5419342fb9d52c4d22a00b5593b09d954fe9f3d60f3557ebc0553dc1c6ca77"
+      "sha256": "e5080b9209d63f1daa51c525188a2f42e710b391ad7986a38e9f447490df0fd7"
     },
     {
       "path": "README.en.md",
@@ -218,11 +218,11 @@
     },
     {
       "path": "runtime/dsh-executor.mjs",
-      "sha256": "97eba9b162d8225e071ebb45923d58f98da22cc150b79daa04fa78fdc9d88b3f"
+      "sha256": "675e73123a5ab1b9319afa9e0f5802d01cc4ce800df5d497be4f246d74a64166"
     },
     {
       "path": "runtime/dsh-executor.test.mjs",
-      "sha256": "755a7015f5c6f74fb724765ce90429a4f7c41d01ff91ec059cf9921804bc0ad1"
+      "sha256": "01b163c33213a01e6b3457daa6f556f7a601891021e76f9500af6ef33059e04c"
     },
     {
       "path": "runtime/evaluate.mjs",
@@ -269,6 +269,10 @@
       "sha256": "d16b8c86e260d0cfc57fb3efb0799eea86231ce5f6a093b735b6cec84907457c"
     },
     {
+      "path": "runtime/path-scope.mjs",
+      "sha256": "10ae2da74d252fd9966715dd16282079a43f2f22b1bbbbda89f32db983d9574c"
+    },
+    {
       "path": "runtime/README.md",
       "sha256": "0858806b15b986e99853e619b6f71a280326d0d357c697c7826f52964e57c036"
     },
@@ -298,7 +302,11 @@
     },
     {
       "path": "runtime/worker-policy.mjs",
-      "sha256": "02ba8e0536572ed4e0d04368f413c2752412c3a4b3333a60b0795fd201b0bcdf"
+      "sha256": "c1a5baf9c794eb76e03ffce06134f931d98fba03c0ea55a7ffb7d7b01f654ae3"
+    },
+    {
+      "path": "runtime/worker-policy.test.mjs",
+      "sha256": "efcc6b77ea7ee7e2c4e590774e6ff94e337e1570747ca97b19cb89d15a56b971"
     },
     {
       "path": "runtime/worker.mjs",

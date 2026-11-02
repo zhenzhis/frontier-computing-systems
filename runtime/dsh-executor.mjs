@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {projectPath} from './control.mjs';
+import {isStrictDescendant} from './path-scope.mjs';
 
 /** Handoff between the native controller and the independently deployed official DSH service. */
 export async function runDshWorker({queue,allowedWorkspaceRoot,nativeTicketId,project,base,sourceRepository,plan,prompt,signal,onProgress=()=>{}}){
@@ -11,7 +12,7 @@ export async function runDshWorker({queue,allowedWorkspaceRoot,nativeTicketId,pr
  const abort=()=>fs.writeFileSync(path.join(queue,`${id}.cancel`),'Explicit cancellation');signal?.addEventListener('abort',abort,{once:true});
  try{for(;;){if(signal?.aborted)throw Error('DSH assignment cancelled');const output=path.join(queue,`${id}.result.json`);if(fs.existsSync(output)){
    const result=JSON.parse(fs.readFileSync(output,'utf8'));if(result.requestId!==id||result.nativeTicketId!==nativeTicketId||result.base!==base)throw Error('DSH result does not match the immutable assignment');if(result.completed!==true)throw Error(`DSH worker did not complete: ${result.summary}`);
-   const source=fs.realpathSync(result.directory),root=fs.realpathSync(allowedWorkspaceRoot);if(!source.toLowerCase().startsWith(root.toLowerCase()+path.sep))throw Error('DSH workspace is outside the configured execution root');
+   const source=fs.realpathSync(result.directory),root=fs.realpathSync(allowedWorkspaceRoot);if(!isStrictDescendant(root,source))throw Error('DSH workspace is outside the configured execution root');
    const assignment=JSON.parse(fs.readFileSync(path.join(source,'.local','fcs-assignment.json'),'utf8'));if(assignment.requestId!==id||assignment.base!==base||assignment.nativeTicketId!==nativeTicketId)throw Error('DSH workspace belongs to another assignment');
    if(!Array.isArray(result.changed)||result.changed.some(f=>f!=='release-manifest.json'&&!plan.files.includes(f)))throw Error('DSH worker changed unassigned files');
    // The supervisor regenerates the release manifest from actual source; never adopt a worker's hashes.
