@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.9",
+  "version": "0.4.10",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "3b68ef6c6f6559a9098ff0eb4d4fcee4951c60323b41bb1858f63559b1d27899"
+      "sha256": "d91cf46f8b201c8b3c74ddf8f94336e3cd5263b75529a5eba4dd6b2e08c52a29"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "3030112645d9e1b4517ae34a66f5f696dc10443ea8b84af034b34b6fa0dfc7a1"
+      "sha256": "27b22b5d30dcf5c6e8bfee7b5487ebc13f4e6b4d9081daed98410ee41a16b876"
     },
     {
       "path": "package.json",
-      "sha256": "e5080b9209d63f1daa51c525188a2f42e710b391ad7986a38e9f447490df0fd7"
+      "sha256": "a08243fe4deaea6b0938672f0b42c933aaee54bf9b427fea137ebe9ae66e6117"
     },
     {
       "path": "README.en.md",
@@ -251,6 +251,10 @@
     {
       "path": "runtime/frontier-bench.mjs",
       "sha256": "940c679481943dd3febf928ed8afb7861ad0c35f5e28bfa4416906bec12ec48f"
+    },
+    {
+      "path": "runtime/frontier-bench.test.mjs",
+      "sha256": "53e763cbe6c5ebc7758f7145aed862cb615fb1137c4089c0750d487b07e56613"
     },
     {
       "path": "runtime/frontier-sources.mjs",

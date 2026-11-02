@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.10 — 2026-11-02
+
+- 新增唯一独立评分器 fcs-artifact-pairs-v1 的确定性 near-miss 校准测试 runtime/frontier-bench.test.mjs（唯一改动文件）。测试只用注入 runRole + os.tmpdir 临时目录，不调用模型、网络或凭据，把评分边界绑定到真实执行路径（runFrontierStudy 的行评分 + comparePairs 门禁 + FrontierLab 有限采纳落盘），不改动评分器行为。
+
 ## 0.4.9 — 2026-11-02
 
 - 本地候选已完成（base 91a2fb0，未提交、未推送、无 PR）。新增 runtime/path-scope.mjs 提供平台感知路径身份：pathIdentity/samePath（win32 大小写不敏感，POSIX 精确）、isStrictDescendant（严格后代，根自身不算）。worker-policy 用 samePath 比较精确声明文件；dsh-executor 用 isStrictDescendant 替换原来的 toLowerCase().startsWith(...)，错误文本保持 “DSH workspace is outside the configured execution root”。未改动 superagentDirectory/ProjectStore 的状态目录哈希。docs/architecture.md 写明平台感知精确文件身份与严格执行根边界，并保留“不是 OS 沙箱、不证明独立验收已发生”。 测试（实际运行）：npm test 173 passed / 0 failed / 2 skipped（仅 Windows 用例）；node --test runtime/worker-policy.test.mjs 3/3；node --test runtime/dsh-executor.test.mjs 4/4；npm run audit passed；node scripts/verify-links.mjs passed。新增 POSIX fixture 断言 src/FOO.mjs、SRC/foo.mjs 被以固定原因拒绝且未创建，src/foo.mjs 仍可写、src/other.mjs 仍拒绝、read 不受影响；DSH 大小写 sibling WORK 被拒绝且无文件复制；win32/posix 纯函数分支均有显式测试（不依赖当前主机）。 负证据（gitignored .local/，已实测）：.local/casefold-boundary-repro.mjs 为脱敏隔离 fixture；.local/pre-fix-evidence.txt 为对 91a2fb0 基线重放，exit 1，3 个失败（两处写越权 + DSH sibling 被接受）；.local/post-fix-evidence.txt 为当前实现，exit 0，全部通过。说明见 .local/casefold-evidence.md。 剩余全部属控制器：重新生成 release-manifest.json（因此本地 node scripts/verify-manifest.mjs 目前按预期报 docs/architecture.md、runtime/dsh-executor.mjs、runtime/dsh-executor.test.mjs、runtime/worker-policy.mjs 哈希漂移及两个新文件未登记），运行 npm run verify 与 npm run verify:sdk（本地未安装 node_modules，故未运行 verify:sdk），并在精确提交上等待 Windows/Linux CI 全绿后发布。已改动文件严格限于分配清单六个：runtime/path-scope.mjs、runtime/worker-policy.mjs、runtime/dsh-executor.mjs、runtime/worker-policy.test.mjs、runtime/dsh-executor.test.mjs、docs/architecture.md；未触碰版本、CHANGELOG、release-manifest.json、凭据、权限或控制器。
