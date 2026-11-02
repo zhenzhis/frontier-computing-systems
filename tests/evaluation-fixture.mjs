@@ -4,9 +4,9 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export async function evaluationFixture({ repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), nCases = 1, repeats = 1, baselinePass = true, candidatePass = true, policy = { kind: 'regression', minReportTasks: 1 } } = {}) {
+export async function evaluationFixture({ repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), nCases = 1, repeats = 1, baselinePass = true, candidatePass = true, policy = { kind: 'regression', minReportTasks: 1 }, temporaryPrefix = 'fcs-evaluation-' } = {}) {
   const { ProjectStore } = await import(pathToFileURL(path.join(repository, 'runtime/control.mjs')));
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fcs-evaluation-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
   const project = path.join(root, 'project'), verifier = path.join(root, 'verifier');
   fs.mkdirSync(project); fs.mkdirSync(verifier);
   const stateRoot = path.join(root, 'state'), store = new ProjectStore(project, { stateRoot });

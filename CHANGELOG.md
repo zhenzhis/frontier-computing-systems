@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.11 — 2026-11-02
+
+- fcs_report 完成（本地候选，无 PR/commit/push）。 1) runtime/evaluation.mjs:24 新增 argumentTextQuotes：按成对单引号、双引号、反引号取整段内容；在原有整参数、附着值、文本片段三层检查之后（:111）复用同一 allowed() 与同一稳定错误 'Report verifier args must stay outside worker project except the trial outputFile' 再做整体路径检查。仅作用于 report 集 verify.args，command.args 与 dev/selection 行为未改。 2) tests/evaluation-fixture.mjs 增加 temporaryPrefix；tests/evaluation.test.mjs:99 新增回归测试，使用 'fcs evaluation-' 临时根：双引号、单引号、反引号整参数、--oracle="..."、-e 内联代码五种项目内路径均被 register() 以稳定错误拒绝，store.read().experiments.fixture 未创建，outputFile 与 assessmentFile 均不存在；同一测试证明该含空白根下引号包裹的项目外路径、--oracle=<外部>、--out="<trial.outputFile>"、独立 outputFile 及原有未加引号参数仍注册成功。既有 standalone/attached/argument-text 用例保持通过。 3) docs/evaluation.md:35-41 更新为四种形态检查，未覆盖清单收窄为：编码/转义后才成形、引号内路径与其它文本混排或跨多个引号/分隔符拼接、环境变量或配置间接引用、注册后符号链接变化与运行期重定向/子进程写入、验收器程序化遍历项目目录；仍明确不是 OS 沙箱、不证明评分器语义或评审者独立。 4) pre-fix 证据：在 base a7681688 上先跑同一新测试，失败输出显示上述五种形态全部注册成功（未提交，日志 /tmp/fcs-quoted-prefix-evidence.log；测试注释也保留可复现说明）。 实际检查：node --test tests/evaluation.test.mjs = 38/38 pass；npm test = 180 tests，178 pass、2 个 Windows-only skip（Windows AST normalization、invalid PowerShell），exit 0；npm run audit pass（120 files）；node scripts/verify-links.mjs pass（35 documents）。工作区仅 4 个指派文件被修改，git diff --check 通过。 remaining/handback：worker 范围无剩余；release-manifest 刷新、版本/CHANGELOG、npm run verify 与 verify:sdk、提交、PR、精确提交 CI 与合并均归控制器。未 push、未创建 PR、未合并、未改凭证/权限/控制器。
+
 ## 0.4.10 — 2026-11-02
 
 - 新增唯一独立评分器 fcs-artifact-pairs-v1 的确定性 near-miss 校准测试 runtime/frontier-bench.test.mjs（唯一改动文件）。测试只用注入 runRole + os.tmpdir 临时目录，不调用模型、网络或凭据，把评分边界绑定到真实执行路径（runFrontierStudy 的行评分 + comparePairs 门禁 + FrontierLab 有限采纳落盘），不改动评分器行为。

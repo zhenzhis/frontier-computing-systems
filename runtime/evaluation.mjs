@@ -18,6 +18,10 @@ const fileIdentity = file => process.platform === 'win32' ? file.toLowerCase() :
 // punctuation that separates values, so every remaining fragment is resolved as a path candidate
 // exactly like a standalone argument. Fragments are not decoded or re-assembled.
 const argumentTextTokens = text => text.match(/[^\s'"`(){}\[\],;|&=<>]+/g) ?? [];
+// A paired quote span can hold one path whose ancestor directory contains whitespace, which the
+// token split above would cut into fragments that each look external. Check each span as one whole
+// path candidate before splitting. Quote pairing is syntactic; escapes and re-assembly are not decoded.
+const argumentTextQuotes = text => [...text.matchAll(/(['"`])([\s\S]*?)\1/g)].map(match => match[2]);
 
 function existing(file) {
   requireValue(typeof file === 'string' && path.isAbsolute(file), 'Evaluation inputs must use absolute paths');
@@ -103,6 +107,8 @@ export function freezeEvaluation(project, plan, maxTrials) {
         // Paths written inside argument text (`-e` code, JSON values, quoted strings, relative
         // traversals) are resolved against the same cwd and keep only the trial outputFile exception.
         for (const token of argumentTextTokens(arg)) requireValue(allowed(token), 'Report verifier args must stay outside worker project except the trial outputFile');
+        // A path wrapped in paired quotes stays one candidate even when its parent directory has whitespace.
+        for (const quoted of argumentTextQuotes(arg)) requireValue(allowed(quoted), 'Report verifier args must stay outside worker project except the trial outputFile');
       }
     }
   }

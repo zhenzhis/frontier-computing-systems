@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.10",
+  "version": "0.4.11",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "d91cf46f8b201c8b3c74ddf8f94336e3cd5263b75529a5eba4dd6b2e08c52a29"
+      "sha256": "456071c67467e4285c6a8ce5daed4af9456ef568992eaded86a616b02c54e066"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -38,7 +38,7 @@
     },
     {
       "path": "docs/evaluation.md",
-      "sha256": "cf743a033700a1e7f4cccaaefa7ceea13e6e6e26df6b79d1faaa1278675ab2a4"
+      "sha256": "0897d1be020ec3f88a5e3800ac5ed732a52371e87acc77b4b439652876056d87"
     },
     {
       "path": "docs/installation.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "27b22b5d30dcf5c6e8bfee7b5487ebc13f4e6b4d9081daed98410ee41a16b876"
+      "sha256": "f4a007779ecbabb4507e9c9c0e6cbdb7e2a9efa34e416ad28e63fa136a273bb2"
     },
     {
       "path": "package.json",
-      "sha256": "a08243fe4deaea6b0938672f0b42c933aaee54bf9b427fea137ebe9ae66e6117"
+      "sha256": "ed147afa872091fcc59ca7fe804ad9bb36a78124fcf6d69377ffa02dc567b1ca"
     },
     {
       "path": "README.en.md",
@@ -234,7 +234,7 @@
     },
     {
       "path": "runtime/evaluation.mjs",
-      "sha256": "a09fc8edd7d6f430b450dabaea37f9fa92ba60ec4b91ace887d474390a27c188"
+      "sha256": "997bccefb20fa234647377b351beaee4650839d3c8d0befec5809bcfbd010c5c"
     },
     {
       "path": "runtime/feedback-core.mjs",
@@ -378,11 +378,11 @@
     },
     {
       "path": "tests/evaluation-fixture.mjs",
-      "sha256": "bd4dc703ef351da95064aeede573202ed39062ae5f6316c6b2dacc860006c6b3"
+      "sha256": "4577d91f96d5a4859aec22c4a306efd9d38a457d43495f6d5930309ee4913f39"
     },
     {
       "path": "tests/evaluation.test.mjs",
-      "sha256": "5fade805b3deee9420673f9a35b83ba941c032636b95c33771c2f0e4c396e97d"
+      "sha256": "29b3aa886f723b741309f7e0ba4d7c97ec9874c182a2fc92ffb20a480f1aecb9"
     },
     {
       "path": "tests/publication.test.mjs",

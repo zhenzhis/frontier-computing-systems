@@ -91,6 +91,49 @@ test('report verifier attached flag values outside the project or naming the tri
   trial.verify.args = args; const experiment = f.register();
   assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
 });
+// Negative evidence (base a7681688, before paired quoted content was path-checked): all forms
+// below registered successfully when the fixture root contained a space, because splitting quoted
+// text on whitespace produced fragments that each resolved outside the project. The check must
+// treat each paired quote span as one whole path. Reproduce by reverting only
+// runtime/evaluation.mjs on this commit.
+test('report verifier quoted project paths under a whitespace-containing root are refused before reservation', async () => {
+  const refused = /must stay outside worker project except the trial outputFile/;
+  const forms = [
+    ['double-quoted whole argument', local => [`"${local}"`]],
+    ['single-quoted whole argument', local => [`'${local}'`]],
+    ['backtick-quoted whole argument', local => ['`' + local + '`']],
+    ['quoted attached value', local => [`--oracle="${local}"`]],
+    ['quoted path in inline code', local => ['-e', `const fs=require('node:fs');fs.readFileSync("${local}",'utf8')`]],
+  ];
+  const outcomes = [];
+  for (const [label, argsFor] of forms) {
+    const f = await evaluationFixture({ temporaryPrefix: 'fcs evaluation-' });
+    const trial = f.registration.evaluation.trials[0], local = path.join(f.project, 'answers.json');
+    fs.writeFileSync(local, '{"total":32}\n');
+    assert.match(local, / /, 'fixture root must contain whitespace');
+    trial.verify.args = argsFor(local);
+    let error = null, registered = false;
+    try { f.register(); registered = true; } catch (thrown) { error = thrown; }
+    outcomes.push({ label, f, trial, error, registered });
+  }
+  assert.deepEqual(outcomes.filter(item => item.registered).map(item => item.label), [], 'quoted project paths must not register');
+  for (const { label, f, trial, error } of outcomes) {
+    assert.match(error?.message ?? '', refused, label);
+    assert.equal(f.store.read().experiments.fixture, undefined);
+    assert.equal(fs.existsSync(trial.outputFile), false);
+    assert.equal(fs.existsSync(trial.assessmentFile), false);
+  }
+  // The same whitespace-containing fixture still accepts quoted external paths, the existing
+  // unquoted forms and the trial outputFile exception.
+  const accepted = await evaluationFixture({ temporaryPrefix: 'fcs evaluation-' });
+  const trial = accepted.registration.evaluation.trials[0], original = trial.verify.args;
+  const external = path.join(accepted.verifier, 'oracle extra.json');
+  fs.writeFileSync(external, '{"total":32}\n');
+  const args = [`"${external}"`, `--oracle="${external}"`, `--oracle=${external}`, `--out="${trial.outputFile}"`, `"${trial.outputFile}"`, ...original];
+  trial.verify.args = args;
+  const experiment = accepted.register();
+  assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
+});
 // Negative evidence (discovery-b9fb3d669c50-1992903, revision before this check existed): with this
 // same fixture, trials[0].verify.args = ['-e', "const fs=require('node:fs');" +
 //   "fs.readFileSync('<fixture-root>/project/answers.json','utf8')"] registered successfully — the
