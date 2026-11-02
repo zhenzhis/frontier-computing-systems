@@ -13,6 +13,11 @@ const inside = (root, file) => { const relative = path.relative(root, file); ret
 const identifier = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 const finite = value => Number.isFinite(value) && value >= 0;
 const fileIdentity = file => process.platform === 'win32' ? file.toLowerCase() : file;
+// A report verifier can also hide a path inside argument text: `-e` inline code, JSON values,
+// quoted strings or relative traversals. Split such text on whitespace, quotes and the argument
+// punctuation that separates values, so every remaining fragment is resolved as a path candidate
+// exactly like a standalone argument. Fragments are not decoded or re-assembled.
+const argumentTextTokens = text => text.match(/[^\s'"`(){}\[\],;|&=<>]+/g) ?? [];
 
 function existing(file) {
   requireValue(typeof file === 'string' && path.isAbsolute(file), 'Evaluation inputs must use absolute paths');
@@ -95,6 +100,9 @@ export function freezeEvaluation(project, plan, maxTrials) {
         requireValue(allowed(arg), 'Report verifier args must stay outside worker project except the trial outputFile');
         // An attached value (`--flag=value`) names a path just as a standalone argument does.
         if (arg.startsWith('-') && arg.includes('=')) requireValue(allowed(arg.slice(arg.indexOf('=') + 1)), 'Report verifier args must stay outside worker project except the trial outputFile');
+        // Paths written inside argument text (`-e` code, JSON values, quoted strings, relative
+        // traversals) are resolved against the same cwd and keep only the trial outputFile exception.
+        for (const token of argumentTextTokens(arg)) requireValue(allowed(token), 'Report verifier args must stay outside worker project except the trial outputFile');
       }
     }
   }

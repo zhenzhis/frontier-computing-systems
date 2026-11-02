@@ -91,6 +91,35 @@ test('report verifier attached flag values outside the project or naming the tri
   trial.verify.args = args; const experiment = f.register();
   assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
 });
+// Negative evidence (discovery-b9fb3d669c50-1992903, revision before this check existed): with this
+// same fixture, trials[0].verify.args = ['-e', "const fs=require('node:fs');" +
+//   "fs.readFileSync('<fixture-root>/project/answers.json','utf8')"] registered successfully — the
+// registration returned an experiment, store.read().experiments.fixture existed and nothing was
+// thrown — although the answers file sits inside the candidate project, because only whole-argument
+// and `--flag=value` positions were resolved as paths. Paths below are sanitized to
+// '<fixture-root>'. Reproduce by reverting only runtime/evaluation.mjs on this commit.
+test('report verifier argument text embedding a project path is refused before reservation', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0];
+  const local = path.join(f.project, 'answers.json'); fs.writeFileSync(local, '{"total":32}\n');
+  const slash = local.split(path.sep).join('/'), refused = /must stay outside worker project except the trial outputFile/;
+  const inline = quoted => ['-e', `const fs=require('node:fs');fs.readFileSync(${quoted},'utf8')`];
+  trial.verify.args = inline(`'${local}'`); assert.throws(f.register, refused);
+  trial.verify.args = inline(`"${local}"`); assert.throws(f.register, refused);
+  trial.verify.args = ['--payload={"file":"' + slash + '"}']; assert.throws(f.register, refused);
+  trial.verify.args = inline(`'${path.relative(f.verifier, local).split(path.sep).join('/')}'`); assert.throws(f.register, refused);
+  assert.equal(f.store.read().experiments.fixture, undefined);
+  assert.equal(fs.existsSync(trial.outputFile), false); assert.equal(fs.existsSync(trial.assessmentFile), false);
+});
+test('inline report verifier text without a project path stays accepted and executes', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0], oracle = f.registration.evaluation.cases[0].oracleFile;
+  const code = "const fs=require('node:fs');const [oracle,output,assessment]=process.argv.slice(-3);const actual=JSON.parse(fs.readFileSync(output,'utf8')),expected=JSON.parse(fs.readFileSync(oracle,'utf8'));fs.writeFileSync(assessment,JSON.stringify({taskOutcome:actual.total===expected.total?'passed':'failed',hardConstraintsPassed:true}));";
+  trial.verify.args = ['-e', code, oracle, trial.outputFile, trial.assessmentFile];
+  const experiment = f.register(); assert.equal(experiment.evaluation.plan.trials[0].verify.args[0], '-e');
+  const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs.find(item => item.trialId === trial.id);
+  assert.equal(row.validity, 'valid'); assert.equal(row.taskOutcome, 'passed'); assert.equal(row.verification.outcome, 'passed');
+  assert.equal(result.summary.eligible, true);
+});
 test('development and selection trials may keep a project-local verifier', async () => {
   for (const split of ['development', 'selection']) {
     const f = await evaluationFixture(); const plan = f.registration.evaluation, trial = plan.trials[0], local = path.join(f.project, 'local-grader.cjs');

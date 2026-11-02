@@ -32,7 +32,13 @@ command 是受信任的任务执行适配器，产生 outputFile；verify 是预
 
 执行顺序固定为 command → 产物快照 → assessment 存在性检查 → verify → 产物一致性检查：command 结束后先记录 outputFile 是否为普通文件及其字节哈希，再检查 assessmentFile 是否已存在。若任务适配器已自行写出 assessment，运行器不启动 verify（以免覆盖该文件），该 trial 记为 `validity=invalid`、`verification.outcome=failed`，invalidReason 指明 assessment 在外部校验前已存在；该文件按哈希写入回执并原地保留供检查，不会被审核当作有效评分。未预写 assessment 时启动 verify，结束后重新记录 outputFile 的普通文件状态与哈希；若与快照不同，说明产物在外部验收期间被改写或替换，该 trial 记为 `validity=invalid`、`verification.outcome=failed`，`verification.error` 为稳定标识 `output-modified-during-verification`，invalidReason 与 verification 字段同时保留 verify 前后的产物哈希；产物原地保留并按真实（verify 后）字节哈希写入回执 `output.sha256`，后续 trial 不再执行，实验保持 ineligible，不能被审核当作有效评分。产物一致性检查只比较 verify 启动前后的文件字节与是否为普通文件，不检测“写入后再还原”、运行期重定向、子进程绕过 node 的其它写入方式或验收器语义正确性，仍不是 OS 沙箱，也不能证明评分器语义正确。
 
-report 集在冻结时强制验收入口位于候选工作项目之外：`verify.cwd` 必须给出且解析后不在候选项目内（省略即默认候选项目，因此被拒绝），`verify.executable` 解析后不得位于候选项目内；`verify.args` 中解析到候选项目内的路径（不论注册时是否已存在）只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。以 `--flag=value` 形式附着在标志位上的值也按 `verify.cwd` 解析并受同一约束：仅当参数以 `-` 开头且含 `=` 时，取其第一个 `=` 之后的值按路径检查，项目内路径同样只允许该 trial 自己的 outputFile；不含 `=` 的标志位、`-e` 等内联代码参数以及 `command.args` 保持原用法。开发/选择集 trial 不受这条入口位置限制；项目外 oracle、assessmentFile、外部目录参数保持原用法。该检查基于参数解析后的路径位置；以下仍属未覆盖：`-e` 等参数内联代码与字符串里嵌入的路径不被解析、不做运行时重定向防护、不是 OS 沙箱、仍不能证明评分器语义正确或评审者独立。附着值规则只是补齐该路径检查的一个入口，不构成独立验收已经完成的证明。
+report 集在冻结时强制验收入口位于候选工作项目之外：`verify.cwd` 必须给出且解析后不在候选项目内（省略即默认候选项目，因此被拒绝），`verify.executable` 解析后不得位于候选项目内；`verify.args` 中以 `verify.cwd` 为解析基准落入候选项目内的路径（不论注册时是否已存在；存在的路径还会对 realpath 结果重复判定），只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。参数按三种形态检查，基准与例外相同：
+
+1. 整个参数本身，例如 `C:\...\project\grader.cjs` 或 `../project/x.json`；
+2. 以 `-` 开头且含 `=` 的参数，取其第一个 `=` 之后的值（`--oracle=<路径>`、`--config=<路径>`）；
+3. 参数文本内部：把每个参数按空白、引号（`'`、`"`、反引号）以及 `( ) { } [ ] , ; | & = < >` 等分隔符切成片段，每个片段都按同一规则解析。因此 `-e` 内联代码、JSON 值、单/双引号字符串里写出的项目绝对路径，以及按 `verify.cwd` 解析后落入候选项目的相对穿越（如 `../project/answers.json`）都会被拒绝。
+
+不含 `=` 的标志位（`--strict`）、`--out=<该 trial 的 outputFile>`、`command.args` 保持原用法。开发/选择集 trial 不受这条入口位置限制；项目外 oracle、assessmentFile、外部目录参数保持原用法。以下仍属未覆盖形态：编码/转义后才成形的路径（百分号编码、`\x`/`\u` 转义、`String.fromCharCode` 或 Buffer 拼接等运行期构造）；被分隔符切开的多段拼接（如 `path.join('<root>','project','answers.json')`，或含空白、引号的路径嵌入更长文本时被切成多段）；环境变量、配置文件或其它间接引用；注册后才出现的符号链接变化、运行期重定向与子进程写入；验收器程序化遍历目录发现项目内文件。该检查不设置 OS 沙箱，不证明评分器语义正确，也不证明评审者独立；参数文本检查只是补齐该路径入口，本身不构成独立验收已经完成的证明。
 
 登记后从返回的 `evaluation.digest` 写出 request.json：
 
