@@ -292,6 +292,81 @@ test('a symbolic link to the external oracle is not an artifact and the verifier
   assert.equal(summary.recorded, 1); assert.equal(summary.planned, 2);
   assert.throws(f.review, /Incomplete frozen trial manifest; Invalid trials require investigation, not silent exclusion/);
 });
+// Negative evidence (actually reproduced at base 582a44d with this fixture from a disposable copy of
+// that revision's archive): the verifier-created assessment symlink
+// was followed. The row written into the evaluation directory carried validity=valid,
+// taskOutcome=passed, hardConstraintsPassed=true, verification.outcome=passed and
+// assessment.sha256=null, and store.experimentResult then threw "Valid trial needs a consistent
+// execution result, verifier and real artifacts": run exit=1, stdout empty, experiment.runs=0. So
+// the recorded line already claimed valid/passed and the run failed closed only afterwards with a
+// generic message. Reproduce by reverting only runtime/evaluation-runner.mjs on this commit.
+// The external target below holds a passing assessment and its bytes are never rewritten; the link
+// is kept in place so the assertions on it show the bypass shape without any revert.
+test('a symbolic link standing in for the assessment is refused before its content is read', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  const external = path.join(f.root, 'external-assessment.json'), forged = JSON.stringify({ taskOutcome: 'passed', hardConstraintsPassed: true });
+  fs.writeFileSync(external, forged);
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [external,assessment]=process.argv.slice(-2);fs.symlinkSync(external,assessment,'file');", external, trial.assessmentFile];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'assessment-not-regular-file');
+  assert.match(row.verification.detail, /AssessmentFile is not a regular file/); assert.match(row.verification.detail, /content was not read/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile)); assert.equal(row.assessment.sha256, null);
+  assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  assert.equal(fs.lstatSync(trial.assessmentFile).isSymbolicLink(), true);
+  assert.equal(fs.readFileSync(trial.assessmentFile, 'utf8'), forged); assert.equal(fs.readFileSync(external, 'utf8'), forged);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.recorded, 1);
+  assert.throws(f.review, /Incomplete frozen trial manifest; Invalid trials require investigation, not silent exclusion/);
+});
+test('a directory standing in for the assessment is refused with the same stable identifier', async () => {
+  const f = await evaluationFixture(); const trials = f.registration.evaluation.trials, trial = trials[0];
+  trial.verify.args = ['-e', "const fs=require('node:fs');const assessment=process.argv.at(-1);fs.mkdirSync(assessment);", trial.assessmentFile];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'assessment-not-regular-file');
+  assert.match(row.verification.detail, /AssessmentFile is not a regular file/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile)); assert.equal(row.assessment.sha256, null);
+  assert.match(row.invalidReason, /not a regular file/); assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  assert.equal(fs.lstatSync(trial.assessmentFile).isDirectory(), true);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  assert.throws(f.review, /Incomplete frozen trial manifest/);
+});
+// The pre-verification distinction is unchanged: an adapter that creates the assessment itself is
+// still refused as assessment-pre-exists (verify does not run), even when that file is a symbolic
+// link. The new path-type refusal applies only to an assessment left after the external verifier.
+test('a symbolic-link assessment written by the adapter still reports assessment-pre-exists', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  const external = path.join(f.root, 'adapter-assessment.json'), forged = JSON.stringify({ taskOutcome: 'passed', hardConstraintsPassed: true });
+  fs.writeFileSync(external, forged);
+  trial.command.args = ['-e', "const fs=require('node:fs');const [output,assessment,external]=process.argv.slice(-3);fs.writeFileSync(output,JSON.stringify({total:32}));fs.symlinkSync(external,assessment,'file');", trial.outputFile, trial.assessmentFile, external];
+  trial.verify.args = ['-e', 'process.exit(0)'];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.verification.error, 'assessment-pre-exists');
+  assert.notEqual(row.verification.error, 'assessment-not-regular-file');
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.assessment.sha256, null); assert.equal(fs.lstatSync(trial.assessmentFile).isSymbolicLink(), true);
+  assert.equal(fs.readFileSync(external, 'utf8'), forged);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false);
+});
 // Positive control next to the refusal above: the same fixture, with an artifact the command
 // actually writes, still grades and reviews. 180-odd existing offline cases keep this contract.
 test('an adapter-written regular file stays a valid, reviewable artifact under lstat semantics', async () => {
