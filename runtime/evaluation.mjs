@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -39,12 +40,46 @@ const fileIdentity = file => process.platform === 'win32' ? file.toLowerCase() :
 // A report verifier can also hide a path inside argument text: `-e` inline code, JSON values,
 // quoted strings or relative traversals. Split such text on whitespace, quotes and the argument
 // punctuation that separates values, so every remaining fragment is resolved as a path candidate
-// exactly like a standalone argument. Fragments are not decoded or re-assembled.
+// exactly like a standalone argument. Fragments are not re-assembled, and the escape decoding below
+// understands percent escapes only: `\x`/`\u` escapes and run-time construction stay raw text.
 const argumentTextTokens = text => text.match(/[^\s'"`(){}\[\],;|&=<>]+/g) ?? [];
 // A paired quote span can hold one path whose ancestor directory contains whitespace, which the
 // token split above would cut into fragments that each look external. Check each span as one whole
-// path candidate before splitting. Quote pairing is syntactic; escapes and re-assembly are not decoded.
+// path candidate before splitting. Quote pairing is syntactic; backslash escapes and re-assembly
+// are not decoded (percent escapes are handled by percentDecode below).
 const argumentTextQuotes = text => [...text.matchAll(/(['"`])([\s\S]*?)\1/g)].map(match => match[2]);
+// A path can also be handed over encoded, so that it only becomes a path once the verifier decodes
+// it: `%2F…%2Fproject%2Fanswers.json`, a percent-encoded relative traversal (`..%2Fproject%2F…`),
+// double encoding, or an encoded literal inside `-e` code. Raw text cannot see those, so every
+// candidate fragment above is decoded in place, at most MAX_DECODE_LAYERS layers deep, and each
+// decoded layer is resolved by exactly the same rule with the same trial outputFile exception.
+// Decoding is byte-wise and total: characters without a valid `%XX` escape are copied unchanged, so
+// a malformed or truncated escape can never throw and skip a candidate. Nesting deeper than
+// MAX_DECODE_LAYERS, `\x`/`\u` escapes, String.fromCharCode/Buffer assembly, environment variables,
+// configuration indirection and run-time re-decoding stay uncovered, and this remains a lexical
+// registration-time check, not an OS sandbox.
+const MAX_DECODE_LAYERS = 4;
+const percentDecode = text => {
+  if (!/%[0-9A-Fa-f]{2}/.test(text)) return text;
+  const bytes = [];
+  for (let index = 0; index < text.length; index++) {
+    const escape = text.slice(index + 1, index + 3);
+    if (text[index] === '%' && /^[0-9A-Fa-f]{2}$/.test(escape)) { bytes.push(Number.parseInt(escape, 16)); index += 2; }
+    else bytes.push(...Buffer.from(text[index], 'utf8'));
+  }
+  return Buffer.from(bytes).toString('utf8');
+};
+// The raw candidate plus each successive decoding, stopping as soon as decoding stops changing the
+// text. An ordinary argument therefore gains one comparison and no extra path candidate.
+const pathCandidateLayers = text => {
+  const layers = [text];
+  while (layers.length <= MAX_DECODE_LAYERS) {
+    const decoded = percentDecode(layers[layers.length - 1]);
+    if (decoded === layers[layers.length - 1]) break;
+    layers.push(decoded);
+  }
+  return layers;
+};
 
 function existing(file) {
   requireValue(typeof file === 'string' && path.isAbsolute(file), 'Evaluation inputs must use absolute paths');
@@ -123,15 +158,20 @@ export function freezeEvaluation(project, plan, maxTrials) {
         const resolved = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
         return (!inside(project, candidate) && !inside(project, resolved)) || fileIdentity(candidate) === output || fileIdentity(resolved) === output;
       };
+      // One stable message covers every refused shape below: the whole argument, an attached value,
+      // a fragment inside argument text, a quoted span, and each percent-decoded layer of any of
+      // them. This only reads and decodes; the frozen arguments are never rewritten.
+      const refusal = 'Report verifier args must stay outside worker project except the trial outputFile';
+      const checked = candidate => { for (const layer of pathCandidateLayers(candidate)) requireValue(allowed(layer), refusal); };
       for (const arg of trial.verify.args) {
-        requireValue(allowed(arg), 'Report verifier args must stay outside worker project except the trial outputFile');
+        checked(arg);
         // An attached value (`--flag=value`) names a path just as a standalone argument does.
-        if (arg.startsWith('-') && arg.includes('=')) requireValue(allowed(arg.slice(arg.indexOf('=') + 1)), 'Report verifier args must stay outside worker project except the trial outputFile');
+        if (arg.startsWith('-') && arg.includes('=')) checked(arg.slice(arg.indexOf('=') + 1));
         // Paths written inside argument text (`-e` code, JSON values, quoted strings, relative
         // traversals) are resolved against the same cwd and keep only the trial outputFile exception.
-        for (const token of argumentTextTokens(arg)) requireValue(allowed(token), 'Report verifier args must stay outside worker project except the trial outputFile');
+        for (const token of argumentTextTokens(arg)) checked(token);
         // A path wrapped in paired quotes stays one candidate even when its parent directory has whitespace.
-        for (const quoted of argumentTextQuotes(arg)) requireValue(allowed(quoted), 'Report verifier args must stay outside worker project except the trial outputFile');
+        for (const quoted of argumentTextQuotes(arg)) checked(quoted);
       }
     }
   }
