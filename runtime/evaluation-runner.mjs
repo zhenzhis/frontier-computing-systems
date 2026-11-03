@@ -1,24 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { artifactHash, checkBindings } from './evaluation.mjs';
+import { artifactHash, artifactState, checkBindings } from './evaluation.mjs';
 
 const OUTPUT_MODIFIED = 'output-modified-during-verification';
-const artifactSnapshot = file => ({
-  sha256: artifactHash(file),
-  regularFile: fs.existsSync(file) && fs.statSync(file).isFile(),
-});
+const OUTPUT_NOT_REGULAR = 'output-not-regular-file';
+// The snapshot uses lstat semantics: a symbolic link (even one that resolves to a regular file),
+// a directory and every special file are not artifacts and carry no byte hash.
+const artifactSnapshot = file => artifactState(file);
 
 export function runEvaluation(store, request, planFile, runCheck, safeData) {
   const allowed = ['schemaVersion', 'experimentId', 'evaluationDigest'];
   if (Object.keys(request).some(key => !allowed.includes(key))) throw Error('Evaluation v2 commands come only from the registered frozen plan');
   const experiment = store.read().experiments[request.experimentId];
   if (experiment?.status !== 'candidate' || experiment.evaluation?.schemaVersion !== 2 || request.evaluationDigest !== experiment.evaluation.digest) throw Error('Registered evaluation identity mismatch');
-  const contract = experiment.evaluation, requestHash = artifactHash(planFile), recorded = new Set(experiment.runs.map(row => row.trialId));
+  const contract = experiment.evaluation, planPath = fs.realpathSync(planFile), requestHash = artifactHash(planPath), recorded = new Set(experiment.runs.map(row => row.trialId));
   const results = [];
   for (const trial of contract.plan.trials) {
     if (recorded.has(trial.id)) continue;
     checkBindings(contract);
-    if (artifactHash(planFile) !== requestHash) throw Error('Evaluation request changed');
+    if (artifactHash(planPath) !== requestHash) throw Error('Evaluation request changed');
     if ([trial.outputFile, trial.assessmentFile].some(file => fs.existsSync(file))) throw Error('Trial outputs must be fresh; inspect before execution');
     const attempt = store.beginEvaluation(experiment.id, trial.id);
     const execution = runCheck(trial.command);
@@ -27,16 +27,27 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     // anything else) rewrites or replaces outputFile during verification, the
     // graded result would be based on bytes the verifier itself wrote.
     const beforeVerification = artifactSnapshot(trial.outputFile);
+    // The artifact must be a regular file the adapter actually wrote. A symbolic link (even one
+    // that resolves to a readable file), a directory or any special file is not an artifact:
+    // refuse before the external verifier starts (and before any assessment is looked at), so a
+    // graded result can never be based on bytes reached through a link and no write through that
+    // link can touch a target outside the project. A wholly missing output keeps the existing
+    // path: the verifier runs and the trial is invalid for want of an artifact.
+    const outputNotRegular = beforeVerification.exists && !beforeVerification.regularFile;
     // Only the pre-reviewed external verifier may create the assessment. If the
     // task adapter already produced one, that claim is unverified evidence: the
     // verifier is not run (so it cannot overwrite the file) and the trial is
     // invalid instead of being accepted as a graded result.
-    const claimedAssessment = fs.existsSync(trial.assessmentFile);
-    let verification = claimedAssessment
-      ? { outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: 'assessment-pre-exists', detail: 'External verifier not run: assessment existed before verification' }
-      : runCheck(trial.verify);
+    const claimedAssessment = !outputNotRegular && fs.existsSync(trial.assessmentFile);
+    let verification;
+    if (outputNotRegular) verification = {
+      outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: OUTPUT_NOT_REGULAR,
+      detail: 'Candidate outputFile is not a regular file (symbolic link, directory or special file); external verifier not run',
+    };
+    else if (claimedAssessment) verification = { outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: 'assessment-pre-exists', detail: 'External verifier not run: assessment existed before verification' };
+    else verification = runCheck(trial.verify);
     const afterVerification = artifactSnapshot(trial.outputFile);
-    const outputChangedDuringVerification = !claimedAssessment
+    const outputChangedDuringVerification = !outputNotRegular && !claimedAssessment
       && (beforeVerification.sha256 !== afterVerification.sha256 || beforeVerification.regularFile !== afterVerification.regularFile);
     if (outputChangedDuringVerification) {
       verification = {
@@ -46,7 +57,10 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
       };
     }
     let assessment, validity = 'valid', invalidReason = null;
-    if (claimedAssessment) {
+    if (outputNotRegular) {
+      validity = 'invalid';
+      invalidReason = 'Candidate outputFile is not a regular file (symbolic link, directory or special file); it is not an artifact and the external verifier was not run';
+    } else if (claimedAssessment) {
       validity = 'invalid';
       invalidReason = 'Assessment existed before external verification; verify not run';
     } else if (outputChangedDuringVerification) {
@@ -58,10 +72,10 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
         if (!['passed', 'failed'].includes(assessment.taskOutcome) || typeof assessment.hardConstraintsPassed !== 'boolean' || (assessment.validity !== undefined && !['valid', 'invalid'].includes(assessment.validity))) throw Error();
         if (assessment.metrics && (typeof assessment.metrics !== 'object' || Object.values(assessment.metrics).some(value => typeof value !== 'number' && typeof value !== 'string'))) throw Error();
         if (assessment.metrics && ['cost', 'tokens', 'interventions'].some(key => assessment.metrics[key] !== undefined && (!Number.isFinite(assessment.metrics[key]) || assessment.metrics[key] < 0))) throw Error();
-        if (verification.outcome !== 'passed' || !artifactHash(trial.outputFile) || assessment.validity === 'invalid' || (execution.outcome !== 'passed' && assessment.taskOutcome !== 'failed')) throw Error();
+        if (verification.outcome !== 'passed' || !beforeVerification.sha256 || !artifactHash(trial.outputFile) || assessment.validity === 'invalid' || (execution.outcome !== 'passed' && assessment.taskOutcome !== 'failed')) throw Error();
       } catch { validity = 'invalid'; invalidReason = 'Missing, inconsistent or invalid verifier assessment/output'; }
     }
-    try { checkBindings(contract); if (artifactHash(planFile) !== requestHash) throw Error(); }
+    try { checkBindings(contract); if (artifactHash(planPath) !== requestHash) throw Error(); }
     catch { validity = 'invalid'; invalidReason = [invalidReason, 'Frozen input or request changed during trial'].filter(Boolean).join('; '); }
     const row = safeData({
       schemaVersion: 2, trialId: trial.id, attemptId: attempt.attemptId, caseId: trial.caseId,

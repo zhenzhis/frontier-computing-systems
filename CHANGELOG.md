@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.12 — 2026-11-03
+
+- 在 4 个授权文件内实现了“评估产物必须是普通文件”的保守失败关闭修复：artifactHash 改为 lstat 语义（符号链接/目录/特殊文件返回 null），evaluation-runner 在启动外部验收器之前以稳定标识 output-not-regular-file 拒绝非普通文件产物，并在回执复核中使“记录后换成字节相同符号链接”的形态失败关闭；新增 3 个离线回归（符号链接冒充产物、普通文件正对照、记录后链接替换/恢复），并在 docs/evaluation.md 写明 lstat 语义、拒绝时机与未覆盖项。无协议变更、无模型/网络/凭据调用。注意：我只有读写工具，没有 shell，因此没有运行 npm run verify / npm run verify:sdk，也没有实际复现“修复前为 valid/passed”；测试注释按事实标注为“由修复前代码推导”，并在同一测试内用链接目标字节断言演示该绕过路径。控制器必须自行运行门禁并独立复核。
+
 ## 0.4.11 — 2026-11-02
 
 - fcs_report 完成（本地候选，无 PR/commit/push）。 1) runtime/evaluation.mjs:24 新增 argumentTextQuotes：按成对单引号、双引号、反引号取整段内容；在原有整参数、附着值、文本片段三层检查之后（:111）复用同一 allowed() 与同一稳定错误 'Report verifier args must stay outside worker project except the trial outputFile' 再做整体路径检查。仅作用于 report 集 verify.args，command.args 与 dev/selection 行为未改。 2) tests/evaluation-fixture.mjs 增加 temporaryPrefix；tests/evaluation.test.mjs:99 新增回归测试，使用 'fcs evaluation-' 临时根：双引号、单引号、反引号整参数、--oracle="..."、-e 内联代码五种项目内路径均被 register() 以稳定错误拒绝，store.read().experiments.fixture 未创建，outputFile 与 assessmentFile 均不存在；同一测试证明该含空白根下引号包裹的项目外路径、--oracle=<外部>、--out="<trial.outputFile>"、独立 outputFile 及原有未加引号参数仍注册成功。既有 standalone/attached/argument-text 用例保持通过。 3) docs/evaluation.md:35-41 更新为四种形态检查，未覆盖清单收窄为：编码/转义后才成形、引号内路径与其它文本混排或跨多个引号/分隔符拼接、环境变量或配置间接引用、注册后符号链接变化与运行期重定向/子进程写入、验收器程序化遍历项目目录；仍明确不是 OS 沙箱、不证明评分器语义或评审者独立。 4) pre-fix 证据：在 base a7681688 上先跑同一新测试，失败输出显示上述五种形态全部注册成功（未提交，日志 /tmp/fcs-quoted-prefix-evidence.log；测试注释也保留可复现说明）。 实际检查：node --test tests/evaluation.test.mjs = 38/38 pass；npm test = 180 tests，178 pass、2 个 Windows-only skip（Windows AST normalization、invalid PowerShell），exit 0；npm run audit pass（120 files）；node scripts/verify-links.mjs pass（35 documents）。工作区仅 4 个指派文件被修改，git diff --check 通过。 remaining/handback：worker 范围无剩余；release-manifest 刷新、版本/CHANGELOG、npm run verify 与 verify:sdk、提交、PR、精确提交 CI 与合并均归控制器。未 push、未创建 PR、未合并、未改凭证/权限/控制器。

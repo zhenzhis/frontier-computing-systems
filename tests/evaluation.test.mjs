@@ -5,6 +5,25 @@ import path from 'node:path';
 import { evaluationFixture } from './evaluation-fixture.mjs';
 import { artifactHash, evaluationHash } from '../runtime/evaluation.mjs';
 
+// The symbolic-link regressions below need real links. Windows without developer mode or the
+// symlink privilege throws EPERM/EACCES for them; that platform records an explicit skip instead
+// of passing silently. The probe touches only the (already disposable) fixture directory.
+function symlinkUnavailable(directory) {
+  const target = path.join(directory, `symlink-probe-target-${process.pid}.json`);
+  const link = path.join(directory, `symlink-probe-${process.pid}.json`);
+  try {
+    fs.writeFileSync(target, '{"total":0}\n');
+    fs.symlinkSync(target, link, 'file');
+    return null;
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP', 'EINVAL'].includes(error.code)) return error.code;
+    throw error;
+  } finally {
+    try { fs.unlinkSync(link); } catch {}
+    try { fs.unlinkSync(target); } catch {}
+  }
+}
+
 test('v2 end-to-end: actual artifact, external grader, summary, reopen and explicit review', async () => {
   const f = await evaluationFixture(); f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
   const result = JSON.parse(run.stdout); assert.equal(result.runs.length, 2); assert.equal(result.summary.eligible, true);
@@ -103,7 +122,7 @@ test('report verifier quoted project paths under a whitespace-containing root ar
     ['single-quoted whole argument', local => [`'${local}'`]],
     ['backtick-quoted whole argument', local => ['`' + local + '`']],
     ['quoted attached value', local => [`--oracle="${local}"`]],
-    ['quoted path in inline code', local => ['-e', `const fs=require('node:fs');fs.readFileSync("${local}",'utf8')`]],
+    ['quoted path in inline code', local => ['-e', `const fs=require('node:fs');fs.readFileSync(\"${local}\",'utf8')`]],
   ];
   const outcomes = [];
   for (const [label, argsFor] of forms) {
@@ -238,6 +257,73 @@ test('an artifact rewritten during external verification is invalid and stops la
   assert.equal(fs.existsSync(trials[0].outputFile), true); assert.equal(fs.existsSync(trials[1].outputFile), false);
   const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
   assert.throws(f.review, /Incomplete frozen trial manifest/);
+});
+// Negative evidence for the artifact-kind check (derived from the pre-fix code, not re-executed
+// here): with the old snapshot (`fs.statSync(file).isFile()`, which follows links) and a validity
+// rule that never required a regular file, this exact shape was recorded as validity=valid,
+// taskOutcome=passed and could reach review. The command created only a symbolic link from
+// outputFile to the external oracle (<fixture-root>/verifier/oracle-0.json, a path derivable from
+// the project path), the external verifier read the oracle bytes through the link, actual.total
+// equalled expected.total and no artifact was produced. Reproduce by reverting only the
+// `outputNotRegular` refusal in runtime/evaluation-runner.mjs together with the lstat semantics of
+// artifactState/artifactHash in runtime/evaluation.mjs on this commit.
+// The link is kept in place after the run, so the assertion on its target below shows the bypass
+// without any revert: reading outputFile resolves to the bytes that would have graded as passed.
+test('a symbolic link to the external oracle is not an artifact and the verifier never runs', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0], oracle = f.registration.evaluation.cases[0].oracleFile;
+  trial.command.args = ['-e', `const fs=require('node:fs');fs.symlinkSync(${JSON.stringify(oracle)},${JSON.stringify(trial.outputFile)},'file');`];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'output-not-regular-file');
+  assert.match(row.verification.detail, /outputFile is not a regular file/); assert.match(row.verification.detail, /verifier not run/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.output.sha256, null); assert.equal(row.assessment.sha256, null);
+  assert.equal(fs.lstatSync(trial.outputFile).isSymbolicLink(), true); assert.equal(fs.existsSync(trial.assessmentFile), false);
+  assert.equal(JSON.parse(fs.readFileSync(trial.outputFile, 'utf8')).total, JSON.parse(fs.readFileSync(oracle, 'utf8')).total);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.equal(summary.recorded, 1); assert.equal(summary.planned, 2);
+  assert.throws(f.review, /Incomplete frozen trial manifest; Invalid trials require investigation, not silent exclusion/);
+});
+// Positive control next to the refusal above: the same fixture, with an artifact the command
+// actually writes, still grades and reviews. 180-odd existing offline cases keep this contract.
+test('an adapter-written regular file stays a valid, reviewable artifact under lstat semantics', async () => {
+  const f = await evaluationFixture(); f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const trial = f.registration.evaluation.trials[0], result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(fs.lstatSync(trial.outputFile).isFile(), true); assert.equal(fs.lstatSync(trial.outputFile).isSymbolicLink(), false);
+  assert.equal(row.verification.outcome, 'passed'); assert.equal(row.verification.error, null);
+  assert.equal(row.validity, 'valid'); assert.equal(row.taskOutcome, 'passed'); assert.equal(row.hardConstraintsPassed, true);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile)); assert.equal(result.summary.eligible, true);
+  assert.equal(f.review().status, 'reviewed-for-adoption');
+});
+// Recorded evidence is re-read with the same lstat semantics: a symbolic link has no artifact hash,
+// so a link standing in for a recorded artifact cannot inherit the receipt's sha256. Restoring the
+// original regular file with the same bytes makes the original receipt verifiable again.
+test('a recorded artifact replaced by a byte-identical symbolic link is refused until restored', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const trial = f.registration.evaluation.trials[0];
+  const recorded = JSON.parse(fs.readFileSync(f.store.read().experiments.fixture.runs[0].artifact, 'utf8'));
+  assert.equal(f.store.evaluationSummary('fixture').eligible, true);
+  const aside = path.join(f.root, 'artifact-copy.json'), original = path.join(f.root, 'artifact-original.json');
+  fs.writeFileSync(aside, fs.readFileSync(trial.outputFile));
+  fs.renameSync(trial.outputFile, original); fs.symlinkSync(aside, trial.outputFile, 'file');
+  assert.equal(artifactHash(trial.outputFile), null);
+  assert.throws(() => f.store.evaluationSummary('fixture'), /Trial output or assessment changed/);
+  assert.throws(f.review, /Trial output or assessment changed/);
+  fs.unlinkSync(trial.outputFile); fs.copyFileSync(aside, trial.outputFile);
+  assert.equal(artifactHash(trial.outputFile), recorded.output.sha256);
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, true); assert.equal(summary.decision, 'eligible-for-review');
+  assert.equal(f.review().status, 'reviewed-for-adoption');
 });
 test('valid semantic failure is retained despite process and grader success', async () => {
   const f = await evaluationFixture({ candidatePass: false }); f.register(); const run = f.run(); assert.equal(run.status, 1);
