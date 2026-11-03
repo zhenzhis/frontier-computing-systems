@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.15",
+  "version": "0.4.16",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "1c1c0e70e687e6e86f09684e5fd71f1f2cfd1a271ba4247f18d468b9b8f59243"
+      "sha256": "e9c93d648a7938b95ad01e4cfa2085e116b382c3b6f6ec096571cb862c36338d"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -58,7 +58,7 @@
     },
     {
       "path": "docs/research/frontier-loop.md",
-      "sha256": "3a43056e5eaaf4e3ac67fa89c8bfcaa408af4b6bde42685b08f812c42415f9d2"
+      "sha256": "98843774e37ff7a20aa2c8251f8275689820a9efb22d4a0d3b956119c9df81f6"
     },
     {
       "path": "docs/research/intent-routing.md",
@@ -74,7 +74,7 @@
     },
     {
       "path": "docs/superagent.md",
-      "sha256": "5b40fde2eeb7f5738d66d976dbae6225b9763c64c2e966444eb7b82c999876d6"
+      "sha256": "bba23852c7240952e9552b76ac3121252747057af88f25dac5474718471ff1ce"
     },
     {
       "path": "docs/tasks/bootstrap.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "647ed2c7d0024811412c1c36a7734137fd1a64804da9355c32e65f26316f553f"
+      "sha256": "ba0b6e38e179767283f900175f9ad51800e4ac562981924ff1fb43e3d0238a54"
     },
     {
       "path": "package.json",
-      "sha256": "b3e40c8a2f765d88de522fd2d2b5aa8fd3c6b9689f31776d8a05d558a08c477f"
+      "sha256": "12c980706017769f793225f96c2c5f3217dc0897138cb902f242f2a1d1c4b171"
     },
     {
       "path": "README.en.md",
@@ -198,11 +198,11 @@
     },
     {
       "path": "runtime/autopilot.mjs",
-      "sha256": "dc5bbcc7108717febbcb83298e9d38a8d981958f3a59e0f0032ae9ca6c8d9ffe"
+      "sha256": "ad82d5873cb6af1e33637f0502ad4fae8e347f765bc3042ee04d88ac7746c8a6"
     },
     {
       "path": "runtime/autopilot.test.mjs",
-      "sha256": "2ca0b1e72292cebf0c9e64613fc5b30eb82e30a686fb65d7f7fff965b85aec28"
+      "sha256": "99b0e9f38ab86a44baaa975598bd5de81ce8a00b61c55aea2694942373eaaa0a"
     },
     {
       "path": "runtime/cli.mjs",
@@ -250,11 +250,11 @@
     },
     {
       "path": "runtime/frontier-bench.mjs",
-      "sha256": "940c679481943dd3febf928ed8afb7861ad0c35f5e28bfa4416906bec12ec48f"
+      "sha256": "b727deaf02ed2a79aee8acd888c39537408063f7b64f391ac1ea2067b6a04f8b"
     },
     {
       "path": "runtime/frontier-bench.test.mjs",
-      "sha256": "53e763cbe6c5ebc7758f7145aed862cb615fb1137c4089c0750d487b07e56613"
+      "sha256": "63c00fe82b89af9a0ca01e12b0cf1b9c1533f338524aa93e83ed3a1d3edaf78f"
     },
     {
       "path": "runtime/frontier-sources.mjs",
@@ -286,7 +286,7 @@
     },
     {
       "path": "runtime/superagent-model.mjs",
-      "sha256": "f1496010cdd9fb530c25fbcdd39c4ce5be86f894b6ef4cc28944509460d9e96a"
+      "sha256": "35966b6d1562b77926ff1243e0ecf2e5f8ed2a1ca0e8778336cfbc6caa7dc4dd"
     },
     {
       "path": "runtime/superagent-panel.html",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.16 — 2026-11-03
+
+- 已按授权计划在 7 个指定文件内实现“角色调用失败稳定错误码 + 按臂排除计数”，未改动采纳阈值、alpha 消耗、字节评分规则、模型渠道、工具权限或暂停/停止语义。runtime/superagent-model.mjs 现在导出 roleFailure()/usageSummary()/ROLE_MESSAGE_LIMIT/ROLE_NO_REPORT/ROLE_ABORTED/ROLE_CALL_BUDGET(80)，三种失败原因分别带稳定 code、role、数值 calls 与仅数值的 usage 汇总（messages/input/output/totalTokens/cost/costReports），message 保持可读且不复制提示词/凭据；已到手的 fcs_report 仍原样返回。runtime/frontier-bench.mjs 的 trial 行新增 errorCode（缺失为 null）与优先按 code 映射的 errorKind（role-message-limit/role-no-report/role-aborted），429 与 timeout/abort 既有分类及无 code 时的消息正则回退保持不变；comparePairs 新增 excludedByArm:{baseline,candidate} 与 errorKinds 计数，passed 表达式、wins/losses、excluded 总数与单侧精确符号检验逐字保持不变。runtime/autopilot.mjs 通过组内 errorFields() 在 assess/launch 失败证据（含 execute/tick 的失败记录）中写入 errorCode 与数值 calls，ASSESS_ATTEMPTS=3 与 assessment-attempts-exhausted 终止路径未改。已新增离线回归（全部注入 runRole 或直接使用错误构造器，不调用模型/网络/凭据）。请注意：本角色没有 shell，无法执行 npm test / npm run verify / npm run verify:sdk，因此不声称测试通过，也未刷新 release-manifest.json。
+
 ## 0.4.15 — 2026-11-03
 
 - 按授权计划补齐 evaluation v2 运行器/回执对硬链接冒名的拒绝：outputFile 在启动 verify 之前、assessmentFile 在 verify 之后读取之前按“lstat 普通文件且 nlink=1”判定，命中时以稳定标识 output-hardlink / assessment-hardlink 记录 invalid 行（对应 sha 为 null、文件原地保留、停止后续 trial、实验保持 ineligible）；回执复核对这两条路径同样要求单链接，因此记录后被换成指向同字节副本的硬链接会以既有稳定错误 'Trial output or assessment changed' 失败关闭，恢复为单链接同字节文件后重新可复核；冻结输入绑定语义未变（artifactHash/checkBindings 仍只按字节）。新增/改写 4 组离线回归（产物硬链接到项目外 oracle、产物硬链接到冻结输入、验收件硬链接、记录后掉包）与正对照，并在 docs/evaluation.md 更新执行顺序、稳定标识、sha=null 记录字段与未覆盖清单。我无 shell，未能亲自运行 node --test / npm test / audit / verify-links；验证命令与 CI、版本/CHANGELOG/release-manifest 刷新按计划归控制器。

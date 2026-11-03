@@ -19,6 +19,8 @@ export function checkedPlan(plan,project){if(!plan||!plan.title||!plan.problem||
 /** How many times one assessment effect may fail before it ends with an explicit rejection instead of retrying forever. */
 export const ASSESS_ATTEMPTS=3;
 const assessmentFailure=(reason,message,extra={})=>Object.assign(Error(message),{assessmentReason:reason,...extra});
+/** Only a stable string code and a numeric call count are copied from a role error into failure evidence; never message bodies, prompts or credentials. */
+const errorFields=error=>{const fields={};if(typeof error?.code==='string'&&error.code)fields.errorCode=error.code;if(Number.isFinite(error?.calls))fields.calls=error.calls;return fields};
 export function acquireWriter(directory,owner,{recoverDead=false}={}){fs.mkdirSync(directory,{recursive:true});const file=path.join(directory,'writer.json');let fd;try{fd=fs.openSync(file,'wx')}catch(error){if(error.code!=='EEXIST'||!recoverDead)throw error;const previous=JSON.parse(fs.readFileSync(file,'utf8'));if(previous.platform!==process.platform)throw error;let dead=false;try{process.kill(previous.pid,0)}catch(e){dead=e.code==='ESRCH'}if(!dead)throw error;fs.renameSync(file,path.join(directory,`dead-${previous.lease}.json`));fd=fs.openSync(file,'wx')}
  const lease=crypto.randomUUID();fs.writeFileSync(fd,JSON.stringify({owner,lease,pid:process.pid,platform:process.platform,at:new Date().toISOString()}));fs.fsyncSync(fd);fs.closeSync(fd);return()=>{const current=JSON.parse(fs.readFileSync(file,'utf8'));if(current.lease!==lease)throw Error('Writer ownership changed');fs.unlinkSync(file)}}
 export function command(executable,args,{cwd,log,signal,timeoutMs=600000}={}){return new Promise((resolve,reject)=>{if(signal?.aborted){reject(Error('Execution cancelled before process start'));return}let output='';const env={...process.env};delete env.NODE_TEST_CONTEXT;const child=spawn(executable,args,{cwd,env,windowsHide:true,stdio:['ignore','pipe','pipe'],signal});const timer=setTimeout(()=>child.kill(),timeoutMs);const collect=data=>{const text=data.toString();output=(output+text).slice(-100000);if(log)fs.appendFileSync(log,text)};child.stdout.on('data',collect);child.stderr.on('data',collect);child.on('error',e=>{clearTimeout(timer);reject(e)});child.on('close',(code,termination)=>{clearTimeout(timer);resolve({passed:code===0,code,termination,output})})})}
@@ -113,15 +115,15 @@ export class Autopilot {
   }finally{this.assessController=null}}
  /** Record a failed effect. A failed assessment retries a bounded number of times, then ends with an explicit rejection; other effects keep their existing retry. */
  async fail(kind,effect,error){const message=String(error?.message??error).slice(0,500);
-  if(kind!=='assess'){this.record('failure',{effectId:effect.id,kind,error:message});const ended=kind==='launch'&&this.store.repo.tickets.get(effect.value.ticketId)?.ended;this.store.settle(effect,ended?undefined:error);return}
+  if(kind!=='assess'){this.record('failure',{effectId:effect.id,kind,error:message,...errorFields(error)});const ended=kind==='launch'&&this.store.repo.tickets.get(effect.value.ticketId)?.ended;this.store.settle(effect,ended?undefined:error);return}
   const attempt=effect.attempts+1;
   if(attempt>=ASSESS_ATTEMPTS||error?.terminal===true){await this.rejectAssessment(effect,error,attempt);return}
-  this.record('failure',{effectId:effect.id,kind,attempt,reason:String(error?.assessmentReason??'assessment-failed'),error:message});
+  this.record('failure',{effectId:effect.id,kind,attempt,reason:String(error?.assessmentReason??'assessment-failed'),error:message,...errorFields(error)});
   this.store.settle(effect,error);
  }
  /** End a failed assessment. An Eval that still holds its triggers records an explicit ignore with the bounded-failure evidence; a superseded or expired one only keeps evidence. */
  async rejectAssessment(effect,error,attempt){const {triggers=[]}=effect.value??{},trigger=triggers[0],reason=error?.terminal===true?'assessment-stale':'assessment-attempts-exhausted',
-  evidence={effectId:effect.id,evalId:effect.value?.evalId??effect.id,kind:'assess',attempts:attempt,reason,rejected:String(error?.assessmentReason??'assessment-failed'),error:String(error?.message??error).slice(0,500),triggerIds:triggers.map(t=>t.id)};
+  evidence={effectId:effect.id,evalId:effect.value?.evalId??effect.id,kind:'assess',attempts:attempt,reason,rejected:String(error?.assessmentReason??'assessment-failed'),error:String(error?.message??error).slice(0,500),triggerIds:triggers.map(t=>t.id),...errorFields(error)};
   if(error?.detail)evidence.detail=error.detail;
   try{const held=trigger&&this.store.engine.candidate(trigger.id);
    if(held&&held.evalId===evidence.evalId){const decision=this.store.decide(trigger.id,{kind:'ignore',reason:'Assessment failed within bounded attempts; no ticket was created',audit:{reason,attempts:attempt,rejected:evidence.rejected,effectId:effect.id}});evidence.decisionId=decision.id}
@@ -186,7 +188,7 @@ export class Autopilot {
    this.store.atomic(()=>this.store.put('review',ticket.id,review));if(review.approved!==true)throw Error(`Review rejected candidate: ${review.reason}`);
    if(!this.authorize('local'))throw Error('Authorization changed before adoption');
    const receipt={ticketId:ticket.id,base,branch,worktree,plan,artifacts,verification,review,worker,model:this.config.model,status:'validated',fingerprint:sourceFingerprint(worktree)};this.store.atomic(()=>this.store.put('candidate',ticket.id,receipt));await this.adopt(receipt,controller.signal);
-  }catch(error){this.record('failure',{ticketId:ticket.id,error:String(error.message)});const t=this.store.repo.tickets.get(ticket.id),permanent=/changed before adoption|changed before publication|Public message failed|Remote branch differs|PR state\/head changed|Exact-commit CI failed|Existing release tag differs|source backup destination/.test(error.message);if(t&&!t.ended&&(!this.store.get('candidate',ticket.id)||permanent)){this.store.engine.report(ticket.id,{state:'failed',summary:String(error.message).slice(0,1000)});this.store.engine.report(ticket.id,{state:'dropped',summary:'Unaccepted candidate preserved with failure evidence; a later discovery may propose a different repair.'})}throw error}
+  }catch(error){this.record('failure',{ticketId:ticket.id,error:String(error.message),...errorFields(error)});const t=this.store.repo.tickets.get(ticket.id),permanent=/changed before adoption|changed before publication|Public message failed|Remote branch differs|PR state\/head changed|Exact-commit CI failed|Existing release tag differs|source backup destination/.test(error.message);if(t&&!t.ended&&(!this.store.get('candidate',ticket.id)||permanent)){this.store.engine.report(ticket.id,{state:'failed',summary:String(error.message).slice(0,1000)});this.store.engine.report(ticket.id,{state:'dropped',summary:'Unaccepted candidate preserved with failure evidence; a later discovery may propose a different repair.'})}throw error}
   finally{clearTimeout(timeout);this.running.delete(ticket.id);release()}}
  async tick(){if(this.stopping||this.store.config().paused){this.cancelCurrent();return}
   if(this.frontier.busy&&this.frontier.sourceDue()&&!this.pending.has('frontier-poll')){this.pending.add('frontier-poll');void this.frontier.poll(this.frontier.controller.signal).catch(error=>this.record('failure',{source:'frontier-poll',error:String(error.message)})).finally(()=>this.pending.delete('frontier-poll'));}
@@ -200,7 +202,7 @@ export class Autopilot {
    if(kind==='input'){const t=this.store.repo.tickets.get(effect.value.ticketId),item=this.running.get(t?.id);if(!t||t.ended||!t.undelivered.length)this.store.settle(effect);else if(item?.session){const inputs=t.inputs.filter(x=>t.undelivered.includes(x.id));await item.session.steer(`New task context, no additional authority: ${JSON.stringify(inputs)}`);this.store.engine.inputsDelivered(t.id,effect.value.assignmentId,inputs.map(x=>x.id));item.readPending??=new Set();for(const input of inputs)item.readPending.add(input.id);this.store.settle(effect)}else this.store.settle(effect,Error('Executor not ready'));continue}
    if(kind==='reply'){const receipt=this.store.get('receipt',effect.value.messageId);if(receipt)this.store.atomic(()=>this.store.put('receipt',receipt.id,{...receipt,status:'sent',channelDelivery:'local-panel'}));this.store.settle(effect);continue}
    this.pending.add(kind);void(kind==='assess'?this.assess(effect):this.execute(effect)).then(()=>this.store.settle(effect)).catch(error=>this.fail(kind,effect,error)).finally(()=>this.pending.delete(kind));
-   }catch(error){this.record('failure',{effectId:effect.id,error:String(error.message)});this.store.settle(effect,error)}
+   }catch(error){this.record('failure',{effectId:effect.id,error:String(error.message),...errorFields(error)});this.store.settle(effect,error)}
   }
  }
  cancelCurrent(){this.frontier.cancel();this.assessController?.abort();for(const item of this.running.values())item.controller.abort()}

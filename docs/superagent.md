@@ -63,6 +63,18 @@ Source and SDK checks establish the covered engineering behavior. They do not pr
 
 Install the pinned official DSH prototype in an independent profile following its deployment documentation. `integrations/dsh-fcs-source` adds the local controller queue through the documented Source interface. Configure that Source's `controller` bot as an inferred candidate and enable only the FCS rule. Keep the queue private. No Feishu account is created or configured by installing this integration.
 
+## Role failure diagnosis
+
+A model-role call fails with one stable code, so retained evidence can separate the causes instead of collapsing them into a single message. `runtime/superagent-model.mjs` uses the exported `roleFailure()` constructor and attaches `code`, `role`, a numeric `calls` count and a numeric-only `usage` aggregate (`messages`, `input`, `output`, `totalTokens`, `cost`, `costReports`) to the error; prompts, message bodies and credentials are never copied into it. The message stays readable: the abort and no-report texts are unchanged, and the message-limit case now names the budget instead of reusing the no-report text. The codes are:
+
+- `FCS_ROLE_MESSAGE_LIMIT` — the fixed budget of 80 assistant messages was reached and the session was aborted on purpose;
+- `FCS_ROLE_NO_REPORT` — the prompt returned normally but `fcs_report` was never called (protocol non-compliance);
+- `FCS_ROLE_ABORTED` — the call was aborted through its signal (pause, stop or cycle timeout).
+
+Research trials keep that evidence. Each `trials.jsonl` row records `errorCode` (the error's `code`, or `null`) and an `errorKind` mapped from that code to `role-message-limit`, `role-no-report` or `role-aborted` first; the earlier `rate-limit` and `timeout-or-abort` classification and the message-regex fallback for uncoded errors are unchanged. Row-level scoring and pair-level judgement differ on purpose: a row with any error is a recorded failure (`passed=false`, even when that arm still wrote a correct `answer.txt`), while `comparePairs` excludes the whole pair, so any role error leaves the study inconclusive and is never a candidate win. The pair summary now reports `excludedByArm:{baseline,candidate}` and `errorKinds` counts next to the unchanged `excluded`, `wins`, `losses`, exact sign test and acceptance rule, so a failure in one arm is attributed to the arm that actually failed instead of appearing only as a single total exclusion. An arm that fails alone therefore stays visible, and it still cannot be turned into a win, a tie or an accepted result.
+
+Autopilot failure evidence for the `assess` and `launch` effects records `errorCode` and the numeric `calls` whenever the error carries them; the bounded `ASSESS_ATTEMPTS` retry and the `assessment-attempts-exhausted` ending are unchanged. These codes are diagnostics only: they do not change acceptance thresholds, alpha spending, model channels, tool permissions, pause/stop semantics or adoption.
+
 ## Recovery and limitations
 
 One controller owns a shared file set. Different engines use separate checkouts. Service crashes retain pending work and validated candidates; external writes with unknown outcomes are reconciled against the destination before retry. A writer lease can be recovered only after its process on the same platform is confirmed dead. Back up active workflow and configuration before deployment, as required by [maintenance](maintenance.md).

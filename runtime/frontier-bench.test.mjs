@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {Superagent,digest} from './superagent.mjs';
 import {FrontierLab} from './frontier.mjs';
-import {BENCH_VERSION,comparePairs,runFrontierStudy} from './frontier-bench.mjs';
+import {BENCH_VERSION,ROLE_FAILURE_KINDS,comparePairs,runFrontierStudy,trialErrorKind} from './frontier-bench.mjs';
+import {ROLE_ABORTED,ROLE_CALL_BUDGET,ROLE_MESSAGE_LIMIT,ROLE_NO_REPORT,roleFailure,usageSummary} from './superagent-model.mjs';
 
 /**
  * Scorer calibration for the only independent evaluator of automatic limited adoption.
@@ -47,9 +48,10 @@ const placement=directory=>{
 
 /**
  * Runs the real study executor with an injected offline runRole. `write` receives the arm, split,
- * pair, task and prompt and returns {bytes,variant}; a null/undefined `bytes` means "produce no
- * artifact". Every recorded row is bound to the taskCase-derived expectation through the scorer's
- * own expectedHash, so the calibration cannot drift onto a different artifact contract.
+ * pair, task and prompt and returns {bytes,variant,error}; a null/undefined `bytes` means
+ * "produce no artifact" and a truthy `error` is thrown after any artifact write. Every recorded row
+ * is bound to the taskCase-derived expectation through the scorer's own expectedHash, so the
+ * calibration cannot drift onto a different artifact contract.
  */
 async function fixtureStudy({seed='calibration',condition={model:'fixture-bytes'},write}){
  const root=temporary(),plan=new Map();let calls=0;
@@ -58,6 +60,7 @@ async function fixtureStudy({seed='calibration',condition={model:'fixture-bytes'
   const where=placement(directory),task=taskOf(directory),step=write({...where,task,directory,prompt})??{};
   plan.set(`${where.split}/${where.pair}/${where.arm}`,{task,variant:step.variant??null,bytes:step.bytes??null});
   if(step.bytes!==null&&step.bytes!==undefined)fs.writeFileSync(path.join(directory,'answer.txt'),step.bytes);
+  if(step.error)throw step.error;
   return{completed:true};
  }});
  const rows=fs.readFileSync(path.join(root,'trials.jsonl'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse)
@@ -185,4 +188,111 @@ test('an all-near-miss candidate earns zero wins, no limited adoption and no fro
   assert(trials.filter(r=>r.arm==='candidate').every(r=>r.passed===false),'every near-miss candidate row is a failure');
   assert(trials.filter(r=>r.arm==='candidate').every(r=>r.error===null),'the rejection comes from the artifact bytes, not an infrastructure error');
  }finally{store.close();}
+});
+
+/**
+ * Role-failure diagnostics. These cases use the exported error constructor directly, so the stable
+ * code, the numeric call/usage shape and the absence of prompt text are asserted without a model,
+ * network or credential. They add no acceptance threshold: any role error still leaves a study
+ * inconclusive and can never become a candidate win.
+ */
+test('a role failure keeps one stable code plus numeric calls and usage, and never copies prompt text',()=>{
+ assert.equal(ROLE_CALL_BUDGET,80,'both paired arms keep the documented fixed assistant-message budget');
+ const usage=usageSummary([{input:10,output:5,totalTokens:15,cost:{total:0.25}},{input:2,output:1,totalTokens:3,cost:{}},{input:'not-a-number',output:null}]);
+ assert.deepEqual(usage,{messages:3,input:12,output:6,totalTokens:18,cost:0.25,costReports:1},'usage keeps token and cost numbers only');
+ assert(Object.values(usage).every(Number.isFinite),'every retained usage value is numeric');
+ const error=roleFailure(ROLE_NO_REPORT,{role:'worker',message:'Model produced no structured role result',calls:3,usage,prompt:'PRIVATE-PROMPT-TEXT'});
+ assert.equal(error.code,'FCS_ROLE_NO_REPORT');
+ assert.equal(error.role,'worker');
+ assert.equal(error.calls,3);
+ assert.deepEqual(error.usage,usage);
+ assert.match(error.message,/no structured role result/, 'the message stays human readable');
+ assert.deepEqual(Object.keys(error).sort(),['calls','code','role','usage'],'only code, role, calls and usage are attached');
+ assert.equal(JSON.stringify(error).includes('PRIVATE-PROMPT-TEXT'),false,'prompt text is never copied into the failure');
+ assert.throws(()=>roleFailure(''),/stable role failure code/);
+ assert.deepEqual(Object.keys(ROLE_FAILURE_KINDS).sort(),[ROLE_ABORTED,ROLE_MESSAGE_LIMIT,ROLE_NO_REPORT].sort(),'the benchmark maps exactly the three documented codes');
+ assert.deepEqual(Object.values(ROLE_FAILURE_KINDS).sort(),['role-aborted','role-message-limit','role-no-report']);
+});
+
+test('coded role failures map to documented kinds while rate-limit, timeout and uncoded errors keep their classification',()=>{
+ assert.equal(trialErrorKind('429 provider rate limit exceeded'),'rate-limit');
+ assert.equal(trialErrorKind('Request timed out after 180000ms'),'timeout-or-abort');
+ assert.equal(trialErrorKind('fixture provider unavailable'),'model-or-tool-error');
+ assert.equal(trialErrorKind('Execution cancelled'),'timeout-or-abort','an uncoded cancellation keeps the earlier message-based classification');
+ assert.equal(trialErrorKind('Execution cancelled',ROLE_ABORTED),'role-aborted');
+ assert.equal(trialErrorKind(`Assistant message limit of ${ROLE_CALL_BUDGET} reached before fcs_report`,ROLE_MESSAGE_LIMIT),'role-message-limit');
+ assert.equal(trialErrorKind('Model produced no structured role result',ROLE_NO_REPORT),'role-no-report');
+ assert.equal(trialErrorKind('429 rate limit',ROLE_NO_REPORT),'role-no-report','a stable code takes precedence over message text');
+ assert.equal(trialErrorKind('unknown failure',null),'model-or-tool-error');
+ assert.equal(trialErrorKind(null,undefined),'model-or-tool-error');
+});
+
+test('per-arm exclusion counts name the arm that failed while the acceptance rule stays unchanged',()=>{
+ const coded=roleFailure(ROLE_NO_REPORT,{role:'worker',message:'Model produced no structured role result',calls:3});
+ const rows=[];
+ for(let i=0;i<6;i++)rows.push({pair:i,arm:'baseline',passed:true,error:null,errorCode:null,errorKind:null},{pair:i,arm:'candidate',passed:true,error:null,errorCode:null,errorKind:null});
+ const candidateFailure=rows.find(row=>row.pair===2&&row.arm==='candidate');
+ candidateFailure.error=coded.message;candidateFailure.errorCode=coded.code;candidateFailure.errorKind=trialErrorKind(coded.message,coded.code);candidateFailure.passed=false;
+ const result=comparePairs(rows);
+ assert.equal(result.excluded,1);
+ assert.deepEqual(result.excludedByArm,{baseline:0,candidate:1},'a one-arm failure is attributed to that arm, not only to a total');
+ assert.deepEqual(result.errorKinds,{'role-no-report':1});
+ assert.equal(result.pairs,5);
+ assert.equal(result.wins,0);
+ assert.equal(result.losses,0);
+ assert.equal(result.passed,false,'one role error still makes the study inconclusive');
+ const mirrored=rows.map(row=>row.pair!==2?row:row.arm==='candidate'
+  ?{pair:2,arm:'candidate',passed:true,error:null,errorCode:null,errorKind:null}
+  :{pair:2,arm:'baseline',passed:false,error:coded.message,errorCode:coded.code,errorKind:'role-no-report'});
+ const otherArm=comparePairs(mirrored);
+ assert.deepEqual(otherArm.excludedByArm,{baseline:1,candidate:0});
+ assert.deepEqual(otherArm.errorKinds,{'role-no-report':1});
+ assert.equal(otherArm.passed,false,'a baseline error is inconclusive too and never becomes a candidate win');
+ assert.equal(otherArm.wins,0);
+});
+
+test('a coded role failure is retained per arm, keeps the study inconclusive and never counts as a win',async()=>{
+ const coded=roleFailure(ROLE_NO_REPORT,{role:'worker',message:'Model produced no structured role result',calls:3,usage:usageSummary([{totalTokens:12,cost:{total:0.1}}])});
+ const aborted=roleFailure(ROLE_ABORTED,{role:'worker',message:'Execution cancelled',calls:1,usage:usageSummary([{totalTokens:4}])});
+ const study=await fixtureStudy({seed:'coded-role-failure',write:({arm,split,pair,task,prompt})=>{
+  const candidate=arm==='candidate'&&prompt.includes('Experimental procedure');
+  if(split!=='selection')return candidate?{bytes:exact(task),variant:'exact'}:{};
+  if(candidate&&pair===1)return{error:coded,variant:'coded-no-report'};
+  if(candidate&&pair===2)return{bytes:exact(task),variant:'exact-then-error',error:coded};
+  if(arm==='baseline'&&pair===3)return{error:aborted,variant:'baseline-aborted'};
+  return candidate?{bytes:exact(task),variant:'exact'}:{};
+ }});
+ const at=(pair,arm)=>study.rows.find(row=>row.split==='selection'&&row.pair===pair&&row.arm===arm);
+ const noReport=at(1,'candidate');
+ assert.equal(noReport.errorCode,ROLE_NO_REPORT);
+ assert.equal(noReport.errorKind,'role-no-report');
+ assert.equal(noReport.passed,false);
+ assert.match(noReport.error,/no structured role result/);
+ const wroteThenFailed=at(2,'candidate');
+ assert.equal(wroteThenFailed.passed,false,'a correct answer.txt cannot rescue an arm that also threw');
+ assert.equal(wroteThenFailed.errorCode,ROLE_NO_REPORT);
+ assert.equal(wroteThenFailed.actualHash,wroteThenFailed.expectedHash,'the bytes it wrote stay in the evidence');
+ const baselineFailure=at(3,'baseline');
+ assert.equal(baselineFailure.errorCode,ROLE_ABORTED);
+ assert.equal(baselineFailure.errorKind,'role-aborted');
+ assert.equal(at(0,'candidate').errorCode,null,'a passing row still records a null code');
+ const selection=study.result.selection;
+ assert.equal(selection.excluded,3);
+ assert.deepEqual(selection.excludedByArm,{baseline:1,candidate:2},'exclusions are attributed to the arm that actually failed');
+ assert.deepEqual(selection.errorKinds,{'role-aborted':1,'role-no-report':2});
+ assert.equal(selection.wins,3,'the three errored pairs contribute no wins');
+ assert.equal(selection.losses,0);
+ assert.equal(selection.passed,false,'any role error keeps the study inconclusive');
+ assert.equal(study.result.accepted,false);
+ assert.equal(study.result.heldout,null);
+ assert.equal(fs.existsSync(path.join(study.root,'heldout')),false,'a failed selection must not open the held-out set');
+ assert.equal(study.result.status,'complete');
+ assert.equal(study.calls,study.result.trials,'every arm is attempted once, with no optional retry');
+ const retained=fs.readFileSync(path.join(study.root,'trials.jsonl'),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse).filter(row=>row.split==='selection');
+ assert.equal(retained.length,12);
+ const kept=retained.find(row=>row.pair===1&&row.arm==='candidate');
+ assert.equal(kept.errorCode,ROLE_NO_REPORT,'the retained trial row keeps the stable code');
+ assert.equal(kept.error,noReport.error);
+ assert.equal(kept.errorKind,'role-no-report');
+ assert.equal(retained.find(row=>row.pair===2&&row.arm==='candidate').actualHash,retained.find(row=>row.pair===2&&row.arm==='candidate').expectedHash);
 });
