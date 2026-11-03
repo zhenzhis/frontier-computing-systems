@@ -452,3 +452,125 @@ test('verifier timeout remains an invalid paid-or-unpaid attempt rather than a p
   const f = await evaluationFixture(); f.registration.evaluation.trials[0].verify.args = ['-e', 'setTimeout(()=>{},10000)']; f.registration.evaluation.trials[0].verify.timeoutMs = 50;
   f.register(); const result = f.run(); assert.equal(result.status, 1); const row = JSON.parse(result.stdout).runs[0]; assert.equal(row.validity, 'invalid'); assert.equal(row.verification.outcome, 'failed'); assert.equal(f.store.evaluationSummary('fixture').reserved, 1);
 });
+// Hard links are the second covered artifact shape. The probe links across the same two directories
+// the regressions use (verifier → project), so a platform or mount that cannot create a hard link
+// records an explicit skip with its stable reason code instead of passing silently. Only
+// EPERM/EACCES/EXDEV/ENOTSUP/ENOSYS justify a skip; Linux CI must execute these cases.
+function hardLinkUnavailable(root) {
+  const target = path.join(root, 'verifier', `hardlink-probe-target-${process.pid}.json`);
+  const link = path.join(root, 'project', `hardlink-probe-${process.pid}.json`);
+  try {
+    fs.writeFileSync(target, '{"total":0}\n');
+    fs.linkSync(target, link);
+    return null;
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'EXDEV', 'ENOTSUP', 'ENOSYS'].includes(error.code)) return error.code;
+    throw error;
+  } finally {
+    try { fs.unlinkSync(link); } catch {}
+    try { fs.unlinkSync(target); } catch {}
+  }
+}
+// Negative evidence is derived from the pre-fix code, not re-executed here: this worker has no
+// shell, so the baseline run on f4541d97 was not performed and is not claimed as measured. On that
+// revision the artifact snapshot was `fs.statSync(file).isFile()` and the runner refused only
+// non-regular files, so an adapter that wrote no artifact and only left
+// `fs.linkSync(<oracleFile>, <outputFile>)` was recorded as validity=valid / taskOutcome=passed /
+// verification.outcome=passed: lstat still saw a regular file (nlink=2), the external verifier read
+// the oracle bytes through the second name, and the row reached review without any real artifact.
+// Reproduce on a disposable copy of f4541d97 by adding only this test's trials and running
+// `node --test tests/evaluation.test.mjs`; the equivalent revert on this commit is to drop the
+// `outputHardLinked` refusal (and the link count in runtime/evaluation.mjs).
+// The link is kept in place after the run, so the assertions below show the bypass shape — a regular
+// file with two names whose bytes are the oracle's — without any revert.
+test('a hard link to the external oracle is not an artifact and the verifier never runs', async t => {
+  const f = await evaluationFixture();
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0], oracle = f.registration.evaluation.cases[0].oracleFile;
+  // The verifier would leave this marker as its first side effect, so a missing marker proves the
+  // external verifier never started. Like every report entry, it lives outside the candidate project.
+  const marker = path.join(f.verifier, 'verifier-ran.marker');
+  trial.command.args = ['-e', `const fs=require('node:fs');fs.linkSync(${JSON.stringify(oracle)},${JSON.stringify(trial.outputFile)});`];
+  trial.verify.args = ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'ran');`];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'output-hardlink');
+  assert.equal(row.verification.exitCode, null); assert.equal(row.verification.wallMs, 0);
+  assert(row.verification.detail.includes(`link count ${fs.lstatSync(trial.outputFile).nlink}`), 'detail must name the link count');
+  assert.match(row.verification.detail, /verifier not run/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(fs.existsSync(marker), false, 'the external verifier must not start');
+  assert.equal(fs.existsSync(trial.assessmentFile), false, 'no assessment may be created or read');
+  const output = fs.lstatSync(trial.outputFile); assert.equal(output.isFile(), true); assert.equal(output.isSymbolicLink(), false); assert.equal(output.nlink, 2);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile)); assert.equal(row.output.sha256, artifactHash(oracle));
+  assert.equal(row.assessment.sha256, null);
+  assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  assert.match(row.invalidReason, /hard link/);
+  assert.doesNotMatch(run.stderr, /Valid trial needs/, 'the invalid row must be recorded, not rejected by a generic receipt error');
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  assert.equal(result.summary.recorded, 1); assert.equal(result.summary.planned, 2);
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.throws(f.review, /Incomplete frozen trial manifest; Invalid trials require investigation, not silent exclusion/);
+});
+// Negative evidence (same pre-fix derivation, not re-executed here): with only the path-type check
+// the verifier-created `fs.linkSync(<external passed JSON>, <assessmentFile>)` was a regular file,
+// so the runner parsed the external bytes and recorded the trial as validity=valid /
+// taskOutcome=passed. Reproduce on a disposable copy of f4541d97; on this commit, drop only the
+// `assessmentHardLinked` refusal in runtime/evaluation-runner.mjs.
+test('a hard link standing in for the assessment is refused before its content is parsed', async t => {
+  const f = await evaluationFixture();
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  const external = path.join(f.verifier, 'external-assessment.json'), forged = JSON.stringify({ taskOutcome: 'passed', hardConstraintsPassed: true });
+  fs.writeFileSync(external, forged);
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [external,assessment]=process.argv.slice(-2);fs.linkSync(external,assessment);", external, trial.assessmentFile];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'assessment-hardlink');
+  assert.equal(row.verification.exitCode, 0, 'verify must run and finish before the assessment is judged');
+  assert(row.verification.detail.includes(`link count ${fs.lstatSync(trial.assessmentFile).nlink}`), 'detail must name the link count');
+  assert.match(row.verification.detail, /content was not parsed as an assessment/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.output.sha256, artifactHash(trial.outputFile));
+  assert.equal(row.assessment.sha256, artifactHash(trial.assessmentFile)); assert.equal(row.assessment.sha256, artifactHash(external));
+  assert.match(row.invalidReason, /hard link/); assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  const assessment = fs.lstatSync(trial.assessmentFile);
+  assert.equal(assessment.isFile(), true); assert.equal(assessment.isSymbolicLink(), false); assert.equal(assessment.nlink, 2);
+  assert.equal(fs.readFileSync(trial.assessmentFile, 'utf8'), forged); assert.equal(fs.readFileSync(external, 'utf8'), forged);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, false); assert.equal(summary.recorded, 1); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.throws(f.review, /Incomplete frozen trial manifest; Invalid trials require investigation, not silent exclusion/);
+});
+// The link count is a run-time snapshot only. A hard-link-aware backup or deduplication tool may add
+// a second name to a frozen input or to a recorded artifact/assessment; artifactHash stays
+// content-only, so bindings and receipt re-verification keep working. The last part records that
+// hard links added *after* the receipt are not re-examined (a documented uncovered shape).
+test('hard-link counts are a run-time snapshot: frozen inputs and recorded receipts survive extra names', async t => {
+  const f = await evaluationFixture();
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  f.register();
+  const input = f.registration.evaluation.arms.candidate.files[0];
+  fs.linkSync(input, path.join(f.project, 'candidate-second-name.cjs'));
+  assert.equal(fs.lstatSync(input).nlink, 2);
+  const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout); assert.equal(result.summary.eligible, true); assert.equal(result.runs.length, 2);
+  const trial = f.registration.evaluation.trials[0], row = result.runs.find(item => item.trialId === trial.id);
+  assert.equal(row.validity, 'valid'); assert.equal(row.output.sha256, artifactHash(trial.outputFile));
+  fs.linkSync(trial.outputFile, path.join(f.project, 'recorded-output-second-name.json'));
+  fs.linkSync(trial.assessmentFile, path.join(f.verifier, 'recorded-assessment-second-name.json'));
+  assert.equal(fs.lstatSync(trial.outputFile).nlink, 2); assert.equal(fs.lstatSync(trial.assessmentFile).nlink, 2);
+  assert.equal(artifactHash(trial.outputFile), row.output.sha256); assert.equal(artifactHash(trial.assessmentFile), row.assessment.sha256);
+  const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, true); assert.equal(summary.decision, 'eligible-for-review');
+  assert.equal(f.review().status, 'reviewed-for-adoption');
+});

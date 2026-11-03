@@ -10,13 +10,25 @@ const requireValue = (condition, message) => { if (!condition) throw Error(messa
 export const evaluationHash = value => digest(canonical(value));
 // Artifact identity uses lstat semantics: only a regular file has bytes. A symbolic link — even
 // one that resolves to a readable regular file — as well as a directory or any special file is
-// not an artifact, so it has no hash and cannot be graded or accepted as output. Hard links,
-// reflinks and copies with identical bytes stay indistinguishable from an original file here.
+// not an artifact, so it has no hash and cannot be graded or accepted as output. Reflinks and
+// copies with identical bytes stay indistinguishable from an original file here.
 export function artifactState(file) {
+  const { exists, regularFile, sha256 } = artifactObservation(file);
+  return { exists, regularFile, sha256 };
+}
+// The execution snapshot needs one extra lstat fact: how many names the regular file has. A second
+// name may be the only reason those bytes exist where the runner reads them (for example a hard
+// link to an oracle outside the project), so a runtime snapshot with linkCount > 1 is refused as a
+// candidate artifact or as an assessment. This observation stays separate from
+// artifactState/artifactHash: bytes, not link topology, decide frozen input binding and receipt
+// re-verification, so a hard-link-aware backup or deduplication tool cannot cause a false rejection
+// of recorded evidence.
+export function artifactObservation(file) {
   let info = null;
   try { info = fs.lstatSync(file); } catch { info = null; }
   const regularFile = info?.isFile() === true;
-  return { exists: info !== null, regularFile, sha256: regularFile ? digest(fs.readFileSync(file)) : null };
+  const linkCount = regularFile && Number.isInteger(info.nlink) ? info.nlink : null;
+  return { exists: info !== null, regularFile, linkCount, sha256: regularFile ? digest(fs.readFileSync(file)) : null };
 }
 export const artifactHash = file => artifactState(file).sha256;
 const inside = (root, file) => { const relative = path.relative(root, file); return !relative || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative)); };
