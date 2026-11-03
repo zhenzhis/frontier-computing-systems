@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {checkedPlan,acquireWriter,Autopilot,verifyCandidate,installMergedDependencies,sourceFingerprint,assertVersionOwnership,ASSESS_ATTEMPTS} from './autopilot.mjs';
+import {checkedPlan,acquireWriter,Autopilot,verifyCandidate,installMergedDependencies,sourceFingerprint,assertVersionOwnership,ASSESS_ATTEMPTS,waitForExactCommitCI,publishCandidate,RELEASE_SUMMARY_LIMIT} from './autopilot.mjs';
 import {ROLE_MESSAGE_LIMIT,ROLE_NO_REPORT,roleFailure,usageSummary} from './superagent-model.mjs';
 import {serveModelGateway} from './model-gateway.mjs';
 const root=()=>fs.mkdtempSync(path.join(os.tmpdir(),'fcs-autopilot-'));
@@ -34,6 +34,107 @@ function adoption(overrides={}){const f=mergeFixture(),artifacts=path.join(f.r,'
 test('merged dependency install uses the committed lockfile with development dependencies and distinct failure stages',async()=>{const{project}=repo();fs.writeFileSync(path.join(project,'package.json'),JSON.stringify({name:'fixture',version:'1.0.0',devDependencies:{'@fixture/present':'1.0.0','@fixture/missing':'1.0.0'}}));fs.mkdirSync(path.join(project,'node_modules','@fixture','present'),{recursive:true});fs.writeFileSync(path.join(project,'node_modules','@fixture','present','package.json'),'{}');const calls=[];const run=async(cwd,args,options)=>{calls.push({cwd,args});return{passed:true,code:0,output:'installed'}};let result=await installMergedDependencies(project,{run});assert.deepEqual(calls[0].args,['ci','--ignore-scripts','--include=dev','--no-audit','--no-fund']);assert.equal(calls[0].cwd,project);assert.equal(result.passed,false);assert.equal(result.stage,'dev-dependencies');assert.deepEqual(result.missing,['@fixture/missing']);fs.mkdirSync(path.join(project,'node_modules','@fixture','missing'),{recursive:true});fs.writeFileSync(path.join(project,'node_modules','@fixture','missing','package.json'),'{}');result=await installMergedDependencies(project,{run});assert.equal(result.passed,true);assert.equal(result.stage,'installed');result=await installMergedDependencies(project,{run:async()=>({passed:false,code:1,output:'npm error fixture install'})});assert.equal(result.passed,false);assert.equal(result.stage,'install');assert.match(result.tail,/npm error fixture install/)});
 test('adoption installs merged dependencies in the active checkout after the fast-forward and before release',async()=>{const{project,worktree,base,merged,pilot,receipt}=adoption(),sequence=[];pilot.install=async target=>{sequence.push({step:'dependencies',project:target,head:git(project,'rev-parse','HEAD'),reflog:git(project,'reflog','-1','--format=%gs')});return{passed:true,stage:'installed',tail:'fixture'}};pilot.release=async saved=>{sequence.push({step:'release',head:git(project,'rev-parse','HEAD')});saved.release={tag:'v1.0.1',commit:saved.adoptedCommit}};assert.equal(git(project,'rev-parse','HEAD'),base);await pilot.adopt(receipt);assert.deepEqual(sequence.map(step=>step.step),['dependencies','release']);assert.equal(sequence[0].project,fs.realpathSync(project));assert.notEqual(sequence[0].project,fs.realpathSync(worktree));assert.equal(sequence[0].head,merged);assert.match(sequence[0].reflog,/fast-forward/i);assert.equal(sequence[1].head,merged);assert.equal(receipt.adoptedCommit,merged);assert.equal(receipt.dependencyInstall.stage,'installed');assert.equal(receipt.release.commit,merged);pilot.store.close()});
 test('a failed merged dependency install retains the merged candidate for retry without a tag, release or new version',async()=>{const{project,base,merged,pilot,receipt}=adoption();let releases=0,installs=0;pilot.install=async()=>{installs++;return installs===1?{passed:false,stage:'install',log:'fixture-install.log',tail:'fixture install failed'}:{passed:true,stage:'installed',tail:'fixture install recovered'}};pilot.release=async saved=>{releases++;saved.release={tag:'v1.0.1',commit:saved.adoptedCommit}};const version=JSON.parse(fs.readFileSync(path.join(project,'package.json'),'utf8')).version;await assert.rejects(pilot.adopt(receipt),/release withheld/);assert.equal(git(project,'rev-parse','HEAD'),merged);assert.notEqual(git(project,'rev-parse','HEAD'),base);const saved=pilot.store.get('candidate','ticket-fixture');assert.equal(saved.adoptedCommit,merged);assert.equal(saved.dependencyInstall.stage,'install');assert.match(saved.dependencyInstall.tail,/fixture install failed/);assert(pilot.store.list('evidence').some(item=>item.step==='dependency-install'&&item.tail.includes('fixture install failed')));assert.equal(releases,0);assert.equal(git(project,'tag','--list'),'');assert.equal(execFileSync('git',['ls-remote','--tags','origin'],{cwd:project,encoding:'utf8'}).trim(),'');assert.equal(JSON.parse(fs.readFileSync(path.join(project,'package.json'),'utf8')).version,version);assert.equal(pilot.store.list('plan').length,1);pilot.runRole=async()=>{throw Error('Retry must not replan')};await pilot.adopt(saved);assert.equal(releases,1);assert.equal(installs,2);assert.equal(git(project,'rev-parse','HEAD'),merged);assert.equal(JSON.parse(fs.readFileSync(path.join(project,'package.json'),'utf8')).version,version);assert.equal(pilot.store.list('plan').length,1);assert.equal(pilot.store.get('candidate','ticket-fixture').dependencyInstall.passed,true);pilot.store.close()});
+test('CI polling keeps a failed query distinct from a completed failing run and performs no merge',async()=>{
+ const directory=root(),log=path.join(directory,'ci.log'),calls=[];let tick=0;
+ const run=async(executable,args)=>{calls.push([executable,...args]);tick+=10000;return{passed:false,code:1,output:'gh: HTTP 503'}};
+ await assert.rejects(waitForExactCommitCI({repository:'fixture/fixture',commit:'deadbeef',project:directory,log,run,now:()=>tick,deadlineMs:25000,pollMs:0}),error=>{
+  assert.equal(error.releaseStage,'ci-query');assert.equal(error.exitCode,1);assert.equal(error.logPath,log);assert(error.releaseSummary.length<=RELEASE_SUMMARY_LIMIT);return true;
+ });
+ assert(calls.length>=2,'the failed query is retried to the deadline');
+ assert(calls.every(call=>call[0]==='gh'&&call[1]==='run'),'a query failure never reaches merge, push or tag');
+});
+function publicationFixture(){
+ const r=root(),remote=path.join(r,'remote.git'),project=path.join(r,'project'),artifacts=path.join(r,'artifacts');
+ execFileSync('git',['init','--bare',remote],{stdio:['ignore','pipe','pipe']});fs.mkdirSync(project);fs.mkdirSync(artifacts);
+ const git=(...args)=>execFileSync('git',args,{cwd:project,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ git('init','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ fs.writeFileSync(path.join(project,'file.txt'),'candidate\n');git('add','.');git('commit','-m','candidate');
+ const commit=git('rev-parse','HEAD');git('remote','add','origin',remote);git('push','origin','HEAD:refs/heads/main');git('push','origin','HEAD:refs/heads/candidate');
+ fs.writeFileSync(path.join(artifacts,'publication-state.json'),JSON.stringify({repository:'fixture/fixture',branch:'candidate',commit,number:7,url:'https://example.invalid/pull/7',stage:'pull-request'},null,2));
+ return{r,project,artifacts,commit,git};
+}
+test('a completed failing exact-commit run keeps ci-failed evidence without merge, tag or push',async()=>{
+ const{project,artifacts,commit,git}=publicationFixture(),calls=[];
+ const run=async(executable,args)=>{calls.push({executable,args});
+  if(executable==='gh'&&args[0]==='pr'&&args[1]==='view')return{passed:true,code:0,output:JSON.stringify({state:'OPEN',headRefOid:commit})};
+  if(executable==='gh'&&args[0]==='run')return{passed:true,code:0,output:JSON.stringify([{headSha:commit,status:'completed',conclusion:'failure'}])};
+  throw Error(`Unexpected fixture command: ${executable} ${args.join(' ')}`);
+ };
+ const tags=git('tag','--list'),remote=git('ls-remote','origin');
+ await assert.rejects(publishCandidate({project,repository:'fixture/fixture',branch:'candidate',title:'Fixture title',body:'Fixture body',artifacts,autoMerge:true,run},()=>true),error=>{assert.equal(error.releaseStage,'ci-failed');return true});
+ assert.equal(calls.some(call=>call.executable==='gh'&&call.args[0]==='merge'),false,'a failed run never merges');
+ assert.equal(calls.some(call=>call.executable==='git'&&(call.args[0]==='push'||call.args[0]==='tag')),false,'a failed run never pushes or tags');
+ assert.equal(git('tag','--list'),tags);assert.equal(git('ls-remote','origin'),remote);
+ await assert.rejects(publishCandidate({project,repository:'fixture/fixture',branch:'candidate',title:'Fixture title',body:'Fixture body',artifacts,autoMerge:true,run},action=>action==='publish'),/Merge authorization withdrawn/);
+});
+function releaseFailureFixture({output=''}={}){
+ const f=mergeFixture(),artifacts=path.join(f.r,'artifacts');fs.mkdirSync(artifacts,{recursive:true});const calls=[];
+ const run=async(executable,args)=>{calls.push({executable,args});
+  if(executable==='gh'&&args[0]==='run')return{passed:true,code:0,output:JSON.stringify([{headSha:f.merged,status:'completed',conclusion:'success'}])};
+  if(executable===process.execPath&&String(args[0]).endsWith('release.mjs'))return{passed:false,code:1,output};
+  throw Error(`Unexpected fixture command: ${executable} ${args.join(' ')}`);
+ };
+ const cfg={...config(f.project),publish:true,updateAfterMerge:true,autoRelease:true,autoMerge:true,repository:'fixture/fixture',backupRoot:path.join(f.r,'backups')};
+ const pilot=new Autopilot(f.project,cfg,{stateRoot:path.join(f.r,'state'),run,publish:async()=>({merged:true,commit:f.base})});
+ pilot.install=async()=>({passed:true,stage:'installed',tail:'fixture'});
+ const {authorization}=cfg;
+ pilot.store.configure({authorization,mode:'auto',allowed:[],sources:['repository'],rules:[{id:'improve',enabled:true,scope:'Fixture only'}]});
+ pilot.store.atomic(()=>{pilot.store.put('plan','ticket-fixture',plan);pilot.store.put('ticket','ticket-fixture',{id:'ticket-fixture',title:plan.title,assignments:[{id:'assignment-fixture',state:'pending'}],inputs:[],undelivered:[]})});
+ const receipt={ticketId:'ticket-fixture',base:f.base,branch:'fixture',worktree:f.worktree,plan,artifacts,worker:{summary:'Changed fixture'},status:'validated',fingerprint:sourceFingerprint(f.worktree)};
+ pilot.store.put('candidate','ticket-fixture',receipt);
+ pilot.store.enqueue('launch','assignment-fixture',{ticketId:'ticket-fixture',assignmentId:'assignment-fixture'});
+ const launch=pilot.store.claim(['launch']);
+ return{...f,artifacts,pilot,receipt,launch,calls};
+}
+test('a failed release child records stage, exit code and log path with a bounded summary',async()=>{
+ const stageLine=JSON.stringify({stage:'dirty-tree',message:'Release candidate is dirty'});
+ const secret='PRIVATE-PROMPT-TEXT Bearer TOP-SECRET';
+ const output=`${secret}\n${stageLine}\n${'Y'.repeat(RELEASE_SUMMARY_LIMIT+5000)}`;
+ const{artifacts,pilot,launch,receipt}=releaseFailureFixture({output});
+ let error;
+ try{await pilot.execute(launch)}catch(failure){error=failure}
+ assert(error);
+ assert.equal(error.releaseStage,'dirty-tree');
+ assert.equal(error.exitCode,1);
+ assert.equal(error.logPath,path.join(artifacts,'release.log'));
+ assert.equal(error.releaseSummary.length,RELEASE_SUMMARY_LIMIT);
+ const ledger=pilot.store.list('failure').find(item=>item.ticketId==='ticket-fixture');
+ assert(ledger,'the execute failure stays in the ledger');
+ assert.equal(ledger.releaseStage,'dirty-tree');
+ assert.equal(ledger.exitCode,1);
+ assert.equal(ledger.logPath,path.join(artifacts,'release.log'));
+ assert.equal(ledger.releaseSummary.length,RELEASE_SUMMARY_LIMIT);
+ const evidence=JSON.stringify(ledger);
+ assert.equal(evidence.includes(secret),false,'failure evidence never copies a prompt or credential');
+ assert.equal(evidence.includes('Y'.repeat(RELEASE_SUMMARY_LIMIT+1)),false,'failure evidence keeps only a bounded output tail');
+ assert.match(ledger.error,/Formal release requires reconciliation/);
+ assert.equal(receipt.release,undefined,'a failed release publishes no release receipt');
+ pilot.store.close();
+});
+test('release stage attribution keeps the existing fail-closed release gates',async()=>{
+ const f=mergeFixture(),artifacts=path.join(f.r,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
+ const run=async(executable,args)=>{if(executable==='gh'&&args[0]==='run')return{passed:true,code:0,output:JSON.stringify([{headSha:f.merged,status:'completed',conclusion:'success'}])};throw Error(`Unexpected fixture command: ${executable} ${args.join(' ')}`)};
+ const cfg={...config(f.project),autoMerge:true,repository:'fixture/fixture',backupRoot:path.join(f.r,'backups')};
+ const pilot=new Autopilot(f.project,cfg,{stateRoot:path.join(f.r,'state'),run,publish:async()=>({merged:true,commit:f.base})});
+ const {authorization}=cfg;pilot.store.configure({authorization,mode:'auto',allowed:[],sources:['repository'],rules:[{id:'improve',enabled:true,scope:'Fixture only'}]});
+ const receipt={ticketId:'ticket-fixture',base:f.base,branch:'fixture',worktree:f.worktree,plan,artifacts,worker:{summary:'Changed fixture'},status:'validated',adoptedCommit:f.merged};
+ const noBackup=new Autopilot(f.project,{...cfg,backupRoot:null},{stateRoot:path.join(f.r,'no-backup-state'),run});
+ const noBackupAuthorization=noBackup.config.authorization;noBackup.store.configure({authorization:noBackupAuthorization,mode:'auto',allowed:[],sources:['repository'],rules:[{id:'improve',enabled:true,scope:'Fixture only'}]});
+ await assert.rejects(noBackup.release(receipt),error=>{assert.equal(error.message,'Formal releases require a source backup destination');assert.equal(error.releaseStage,'backup-destination');return true});
+ noBackup.store.close();
+ git(f.project,'tag','-a','v1.0.0','-m','fixture',f.base);
+ const tags=git(f.project,'tag','--list'),remote=git(f.project,'ls-remote','origin');
+ await assert.rejects(pilot.release(receipt),error=>{assert.equal(error.message,'Existing release tag differs; never rewrite');assert.equal(error.releaseStage,'tag-immutable');return true});
+ assert.equal(git(f.project,'tag','--list'),tags);
+ assert.equal(git(f.project,'ls-remote','origin'),remote);
+ pilot.stopping=true;
+ await assert.rejects(pilot.release(receipt),/Release authorization withdrawn/);
+ assert.equal(git(f.project,'tag','--list'),tags);
+ pilot.store.close();
+ let invoked=false;
+ await assert.rejects(publishCandidate({project:f.project,repository:'fixture/fixture',branch:'candidate',title:'Fixture',body:'Fixture',artifacts,run:async()=>{invoked=true;throw Error('must not run')}},()=>false),/Publication is not authorized/);
+ assert.equal(invoked,false,'publication authorization is still checked before any command');
+});
 function assessmentFixture(router){const{r,project}=repo(),counts={router:0,publish:0},pilot=new Autopilot(project,config(project),{stateRoot:path.join(r,'state'),runRole:async args=>{counts.router++;return router(args)},publish:async()=>{counts.publish++;return{merged:true}}});
  const {authorization}=pilot.config;pilot.store.configure({authorization,mode:'auto',allowed:['local:owner'],sources:['local'],rules:[{id:'improve',enabled:true,scope:'Fixture only'}]});
  pilot.store.receive({id:'request',source:'local',threads:[{source:'local',id:'request'}],actor:{source:'local',id:'owner'},human:true,addressed:'direct',at:'2026-10-31T00:00:00Z',text:'Fix fixture',meta:{}});

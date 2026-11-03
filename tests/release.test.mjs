@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {releaseTestFiles,releasePlan} from '../scripts/release.mjs';
+import {releaseTestFiles,releasePlan,release} from '../scripts/release.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url)),script=fileURLToPath(new URL('../scripts/release.mjs',import.meta.url));
 const fixture=t=>{const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'fcs-release-')));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));return directory;};
@@ -14,6 +14,36 @@ const manifest=(directory,scripts,version='0.0.1')=>fs.writeFileSync(path.join(d
 // git and gh are absent from this PATH, so a preview that reached for either
 // would fail loudly instead of quietly mutating a repository.
 const isolated=directory=>{const empty=path.join(directory,'empty-path');fs.mkdirSync(empty);const env={...process.env};for(const key of Object.keys(env))if(key.toLowerCase()==='path')delete env[key];env.PATH=empty;return env;};
+const gitAt=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+function releaseRepository(t,{remote=false}={}){
+ const base=fixture(t),project=path.join(base,'project');fs.mkdirSync(project);
+ const git=(...args)=>gitAt(project,...args);
+ git('init','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ fs.writeFileSync(path.join(project,'package.json'),JSON.stringify({name:'release-fixture',version:'9.9.9',private:true},null,2)+'\n');
+ const scripts=path.join(project,'scripts');fs.mkdirSync(scripts);
+ for(const name of ['release.mjs','backup.mjs','audit-public.mjs'])fs.copyFileSync(path.join(root,'scripts',name),path.join(scripts,name));
+ git('add','.');git('commit','-m','baseline');
+ let bare=null;
+ if(remote){bare=path.join(base,'remote.git');execFileSync('git',['init','--bare',bare],{stdio:['ignore','pipe','pipe']});git('remote','add','origin',bare);git('push','-u','origin','main');}
+ return{base,project,git,remote:bare};
+}
+function fakeGh(base,{runs=[],status=0}={}){
+ const bin=path.join(base,'fake-bin');fs.mkdirSync(bin,{recursive:true});const scriptFile=path.join(bin,'gh.mjs');
+ fs.writeFileSync(scriptFile,`process.stdout.write(${JSON.stringify(JSON.stringify(runs))}+'\\n');process.exitCode=${status};\n`);
+ if(process.platform==='win32')fs.writeFileSync(path.join(bin,'gh.cmd'),`@"${process.execPath}" "${scriptFile}" %*\r\n`);
+ else{const file=path.join(bin,'gh');fs.writeFileSync(file,`#!/bin/sh\nexec "${process.execPath}" "${scriptFile}" "$@"\n`);fs.chmodSync(file,0o755)}
+ const env={...process.env},pathKey=Object.keys(env).find(key=>key.toLowerCase()==='path')??'PATH';env[pathKey]=[bin,env[pathKey]].filter(Boolean).join(path.delimiter);return env;
+}
+const runRelease=(project,args,env={})=>spawnSync(process.execPath,[path.join(project,'scripts','release.mjs'),...args],{cwd:project,encoding:'utf8',env:{...process.env,...env}});
+function machineFailure(result){
+ assert.equal(result.status,1,result.stderr);
+ assert.equal(result.stdout.trim(),'');
+ const lines=result.stderr.trim().split(/\r?\n/);assert.equal(lines.length,1,'a refusal emits exactly one machine-readable line');
+ const failure=JSON.parse(lines[0]);assert.deepEqual(Object.keys(failure).sort(),['message','stage']);return failure;
+}
+function releaseFailure(run){
+ let error;try{run()}catch(failure){error=failure}assert(error,'the release call must refuse');return error;
+}
 
 test('the release gate derives exactly the npm test set, including the previously skipped suites',()=>{
  const enumerated=['runtime','tests'].flatMap(directory=>fs.readdirSync(path.join(root,directory)).filter(name=>name.endsWith('.test.mjs')).map(name=>`${directory}/${name}`)).sort();
@@ -82,4 +112,57 @@ test('the plan refuses a version its tag cannot express and keeps the push guard
  assert.equal(releasePlan(directory,{push:true}).push,true);
  fs.writeFileSync(path.join(directory,'package.json'),JSON.stringify({version:'0.1'},null,2));
  assert.throws(()=>releasePlan(directory),/semver/);
+});
+
+// Baseline a6a52657bce8fe36f52e9d8d4d568b18c37b69e6 printed only the folded
+// error.message and exited 1; it had no stage record. The assertions below are
+// the observable contrast this change introduces.
+test('the release CLI names a dirty candidate without tags, backups or pushes',t=>{
+ const{project,git}=releaseRepository(t,{remote:true}),destination=path.join(path.dirname(project),'backups');
+ fs.appendFileSync(path.join(project,'package.json'),'\n');
+ const tags=git('tag','--list'),remote=git('ls-remote','origin');
+ const failure=machineFailure(runRelease(project,['--apply','--backup-dir',destination]));
+ assert.equal(failure.stage,'dirty-tree');
+ assert.equal(failure.message,'Release candidate is dirty');
+ assert.equal(git('tag','--list'),tags,'a dirty refusal creates no tag');
+ assert.equal(git('ls-remote','origin'),remote,'a dirty refusal pushes nothing');
+ assert.equal(fs.existsSync(destination),false,'a dirty refusal writes no backup');
+});
+
+test('the release CLI names an existing tag and never overwrites or pushes it',t=>{
+ const{project,git}=releaseRepository(t,{remote:true}),destination=path.join(path.dirname(project),'backups');
+ git('tag','-a','v9.9.9','-m','fixture');
+ const tags=git('tag','--list'),remote=git('ls-remote','origin');
+ const failure=machineFailure(runRelease(project,['--apply','--backup-dir',destination]));
+ assert.equal(failure.stage,'tag-exists');
+ assert.equal(failure.message,'Release tag already exists; never overwrite');
+ assert.equal(git('tag','--list'),tags,'an existing-tag refusal leaves tags unchanged');
+ assert.equal(git('ls-remote','origin'),remote,'an existing-tag refusal pushes nothing');
+ assert.equal(fs.existsSync(destination),false,'an existing-tag refusal writes no backup');
+});
+
+test('the release CLI distinguishes a remote main mismatch before any tag or push',t=>{
+ const{project,git}=releaseRepository(t,{remote:true}),destination=path.join(path.dirname(project),'backups');
+ fs.writeFileSync(path.join(project,'local.txt'),'ahead\n');git('add','.');git('commit','-m','local ahead');
+ const tags=git('tag','--list'),remote=git('ls-remote','origin');
+ const failure=machineFailure(runRelease(project,['--apply','--push','--backup-dir',destination]));
+ assert.equal(failure.stage,'remote-main-mismatch');
+ assert.equal(failure.message,'Push the candidate to main, back it up and wait for its CI before publishing the tag');
+ assert.equal(git('tag','--list'),tags);
+ assert.equal(git('ls-remote','origin'),remote);
+ assert.equal(fs.existsSync(destination),false);
+});
+
+test('the release gate distinguishes missing exact-commit Verify success and a failed query',t=>{
+ const{project,git}=releaseRepository(t,{remote:true}),destination=path.join(path.dirname(project),'backups');
+ const tags=git('tag','--list'),remote=git('ls-remote','origin');
+ const notPassed=releaseFailure(()=>release(project,{apply:true,push:true,backupDestination:destination,runGh:()=>'[]'}));
+ assert.equal(notPassed.releaseStage,'remote-ci-not-passed');
+ assert.equal(notPassed.message,'Latest remote Verify run for this exact candidate must pass before tag publication');
+ const queryFailed=releaseFailure(()=>release(project,{apply:true,push:true,backupDestination:destination,runGh:()=>{throw Error('gh unavailable')}}));
+ assert.equal(queryFailed.releaseStage,'ci-query');
+ assert.equal(queryFailed.message,'Cannot query the remote Verify run for this candidate');
+ assert.equal(git('tag','--list'),tags,'a CI refusal creates no tag');
+ assert.equal(git('ls-remote','origin'),remote,'a CI refusal pushes nothing');
+ assert.equal(fs.existsSync(destination),false,'a CI refusal writes no backup');
 });
