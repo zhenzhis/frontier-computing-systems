@@ -14,6 +14,12 @@ export const ASSESSMENT_HARDLINK = 'assessment-hardlink';
 // without touching artifactHash, the frozen input bindings or the receipts that are re-verified
 // from those hashes.
 const artifactSnapshot = file => artifactObservation(file);
+// Existence of a path entry uses the same lstat semantics, not fs.existsSync (which follows links):
+// a dangling symbolic link, a directory or any special file is an entry that already exists even
+// though following it would fail. This predicate decides only whether a trial may start and whether
+// an assessment was pre-written; artifactSnapshot below still decides whether the entry is a
+// regular file with a byte hash.
+const entryExists = file => { try { fs.lstatSync(file); return true; } catch { return false; } };
 
 export function runEvaluation(store, request, planFile, runCheck, safeData) {
   const allowed = ['schemaVersion', 'experimentId', 'evaluationDigest'];
@@ -26,7 +32,7 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     if (recorded.has(trial.id)) continue;
     checkBindings(contract);
     if (artifactHash(planPath) !== requestHash) throw Error('Evaluation request changed');
-    if ([trial.outputFile, trial.assessmentFile].some(file => fs.existsSync(file))) throw Error('Trial outputs must be fresh; inspect before execution');
+    if ([trial.outputFile, trial.assessmentFile].some(entryExists)) throw Error('Trial outputs must be fresh; inspect before execution');
     const attempt = store.beginEvaluation(experiment.id, trial.id);
     const execution = runCheck(trial.command);
     // Snapshot the candidate artifact before the external verifier starts. The
@@ -52,7 +58,7 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     // task adapter already produced one, that claim is unverified evidence: the
     // verifier is not run (so it cannot overwrite the file) and the trial is
     // invalid instead of being accepted as a graded result.
-    const claimedAssessment = !outputRefused && fs.existsSync(trial.assessmentFile);
+    const claimedAssessment = !outputRefused && entryExists(trial.assessmentFile);
     let verification;
     if (outputNotRegular) verification = {
       outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: OUTPUT_NOT_REGULAR,
