@@ -49,4 +49,12 @@ GitHub 的重定向行为与例外以 [官方更名说明](https://docs.github.c
 
 推送 tag 与创建 GitHub Release 是两步。`Verify` 工作流在版本 tag 的 Windows 和 Linux 验证均通过后，自动创建正式 GitHub Release 并生成公开变更说明；分支和 PR 验证不会创建 Release。发布 job 只获得仓库内容写权限，核对 tag 对应的提交和包版本，使用 `--verify-tag`，不会补造、移动或覆盖 tag。重跑会保留已经发布的 Release，遇到既有草稿或预发布版本会停止并要求核对。所有已发布稳定版本按 SemVer 比较后选择 Latest，较旧 tag 的迟到任务不会把它降回旧版。Release 创建失败会使工作流失败，保留该 tag，可重跑失败 job；不应移动 tag 来重试。
 
+### 发布阶段标识（诊断）
+
+`--apply` 或 `--push` 被拒绝时，`scripts/release.mjs` 在 stderr 输出一行机器可读 JSON（这些拒绝路径不会输出其他 JSON 记录）：`{"stage":"...","message":"..."}`，保留原来的可读 message，退出码仍为 1。CLI 阶段集合为 `semver`、`backup-destination`、`dirty-tree`、`tag-exists`、`remote-main-mismatch`、`ci-query`、`remote-ci-not-passed`、`audit-public`、`verify-links`、`verify-manifest`、`verify-sdk`、`release-test-set`、`release-tests`、`backup`、`tag-create`、`tag-push`、`git`；无法识别的失败记为 `unexpected`。autopilot 调用发布脚本失败时，把 `releaseStage`、`exitCode`、`logPath` 与有界 `releaseSummary`（最多 2000 字符）写入 failure 账本，完整输出仍只保存在 `release.log`；autopilot 侧另有 `tag-immutable`、`release-command`、`ci-failed`、`ci-timeout` 阶段。CI 轮询区分 `ci-query`（查询本身失败）、`ci-failed`（已完成但结论非 success）和 `ci-timeout`（deadline 前未完成）。
+
+这些标识只用于诊断失败位置：它们不是发布成功的证明，不改变授权、重试次数、tag 不可变、备份要求、版本所有权或任何发布/合并门禁，也不构成独立验收；发布仍以实际门禁输出、tag、备份回执和 CI 结果为准。
+
+基线负证据（提交 `a6a52657bce8fe36f52e9d8d4d568b18c37b69e6` 的 `git archive` 隔离副本，实测）：在干净提交后追加空白使工作树变脏，直接运行基线 `node scripts/release.mjs --apply --backup-dir <dir>`，退出码 1，stdout 为空，stderr 只有 `Release candidate is dirty`，没有 JSON 阶段行。另一个 harness 直接 import 基线 `runtime/autopilot.mjs` 的 `Autopilot`，用临时 git 仓库、成功的假 `gh run list` 响应和 `adopt` 同形 receipt 调用 `release(receipt)`，再把同一错误传给 `fail('launch', effect, error)` 读取 failure 账本；实测抛出与账本都只有 `Formal release requires reconciliation`，`releaseStage`/`exitCode`/`logPath` 均为 null。对应断言见 `tests/release.test.mjs` 的 “the release CLI names a dirty candidate…” 与 `runtime/autopilot.test.mjs` 的 “a failed release child records stage…”；基线未实测的 CI 轮询分支（`ci-query`、`ci-failed`、`ci-timeout`）属于静态推断，未计入上述实测输出。
+
 首次公开或协议变更需要实际恢复演练。依赖升级固定版本与 lockfile；不能凭上游最新版标签宣称性能提升。对影响模型或上下文的配置采用有基线、单变量、独立最终用例的实验，候选失败可以保留研究记录但不默认上线。

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.4.18",
+  "version": "0.4.19",
   "baseWorkflow": "WF7",
   "intentRouting": "deferred",
   "files": [
@@ -22,7 +22,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "7427197e6829f522889afe03fc4669223d5e298a8dcad6ddd920377372a111b3"
+      "sha256": "5af93eb4b1d71e6e0a1e576b98c2c86c6f47e613979500c976f354ca0f39c49b"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -46,7 +46,7 @@
     },
     {
       "path": "docs/maintenance.md",
-      "sha256": "ac9417837ed6516393a627bc2379f4efb16671ab489d3cd58c94308c3a24898a"
+      "sha256": "98d207619cb0016cb071e9baa81ae5bfa047f69f0bc6fe57af68589679898457"
     },
     {
       "path": "docs/research/evaluation-methods.md",
@@ -174,11 +174,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "bef25819999f8028a005c50f6bc575c2d58b4c33aaaca8f2c30f1da27e7858bd"
+      "sha256": "6d35cd4dc6be507834b17fc9d2efb836fdc52c375e0362f4c084e8f137f7fc39"
     },
     {
       "path": "package.json",
-      "sha256": "bdaa6ab72afd95712139ef30c79a044d715902bb62b266228c17a4b1c1cc0d30"
+      "sha256": "5d1d86477b2c1c40dc876ef5cd50d4719761c0a3e759b14cc5fb7a5824469db5"
     },
     {
       "path": "README.en.md",
@@ -198,11 +198,11 @@
     },
     {
       "path": "runtime/autopilot.mjs",
-      "sha256": "ad82d5873cb6af1e33637f0502ad4fae8e347f765bc3042ee04d88ac7746c8a6"
+      "sha256": "6e3483fb535964ca68ded5ce59df71abdf1f187ba6f7e490903f08e7c0f6b397"
     },
     {
       "path": "runtime/autopilot.test.mjs",
-      "sha256": "99b0e9f38ab86a44baaa975598bd5de81ce8a00b61c55aea2694942373eaaa0a"
+      "sha256": "470ea7e97860aab037b9fe822e1096ab720d92bf28debd7f92b422f10c3814ac"
     },
     {
       "path": "runtime/cli.mjs",
@@ -334,7 +334,7 @@
     },
     {
       "path": "scripts/release.mjs",
-      "sha256": "82ee649f3a68c6999e037b11535a01d48774bb5bdbfae4c032e06a9ae8e3fece"
+      "sha256": "fc05bc00ea912040bbe25aa203caa7b5c625d3f1bfb6f15182f8f0d07c23ba75"
     },
     {
       "path": "scripts/verify-links.mjs",
@@ -390,7 +390,7 @@
     },
     {
       "path": "tests/release.test.mjs",
-      "sha256": "1efee91c0ae437c68d68d2d4835cb684e5360b130a5af34fced9fbfa13cbce9f"
+      "sha256": "69a161280d32e1701e8acde1ac353148b7b56dc69815b37cb276cd66ad512b0a"
     },
     {
       "path": "tests/verify-links.test.mjs",

@@ -10,6 +10,14 @@ const defaultRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'
 // running a narrower suite than the package declares.
 const testDirectories=['runtime','tests'],testGlob=/^([A-Za-z0-9._-]+)\/\*\.test\.mjs$/;
 
+/** Stable diagnostic identifiers for release refusals; they identify a stage, not a release result. */
+export const RELEASE_STAGES=Object.freeze([
+ 'semver','backup-destination','dirty-tree','tag-exists','remote-main-mismatch','ci-query','remote-ci-not-passed',
+ 'audit-public','verify-links','verify-manifest','verify-sdk','release-test-set','release-tests','backup',
+ 'tag-create','tag-push','git','unexpected'
+]);
+const stageError=(stage,message,cause)=>{const error=cause===undefined?Error(message):Error(message,{cause});error.releaseStage=stage;return error};
+
 export function releaseTestFiles(root=defaultRoot){
  const file=path.join(root,'package.json');
  if(!fs.existsSync(file))throw Error(`Release test set needs ${file}`);
@@ -36,30 +44,46 @@ export function releaseTestFiles(root=defaultRoot){
 
 export function releasePlan(root=defaultRoot,{apply=false,push=false,backupDestination=null}={}){
  const version=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version;
- if(!/^\d+\.\d+\.\d+$/.test(version))throw Error('Release requires an explicit semver');
+ if(!/^\d+\.\d+\.\d+$/.test(version))throw stageError('semver','Release requires an explicit semver');
  return {tag:`v${version}`,backupDestination,apply,push,requiresSuccessfulRemoteCIForPush:true,steps:['verify clean committed candidate','verify public source and native SDK','check already-pushed candidate CI before public tag push','backup all versions','create immutable annotated tag','backup tagged refs','push tag only when explicitly selected']};
 }
 
-export function release(root=defaultRoot,{apply=false,push=false,backupDestination=null}={}){
- const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
+export function release(root=defaultRoot,{apply=false,push=false,backupDestination=null,runGh=args=>execFileSync('gh',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']})}={}){
+ // Git and gh diagnostics are captured rather than inherited so a refusal's stderr
+ // carries the one machine-readable stage record instead of tool output around it.
+ const git=(...args)=>{try{return execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim()}catch(error){throw stageError('git',error.message)}};
  const plan=releasePlan(root,{apply,push,backupDestination});
  if(!apply)return plan;
  const version=plan.tag.slice(1);
- if(!backupDestination)throw Error('--backup-dir is required');
- if(git('status','--porcelain'))throw Error('Release candidate is dirty');
- if(git('tag','--list',plan.tag))throw Error('Release tag already exists; never overwrite');
+ if(!backupDestination)throw stageError('backup-destination','--backup-dir is required');
+ if(git('status','--porcelain'))throw stageError('dirty-tree','Release candidate is dirty');
+ if(git('tag','--list',plan.tag))throw stageError('tag-exists','Release tag already exists; never overwrite');
  if(push){
   const head=git('rev-parse','HEAD'),remote=git('ls-remote','origin','refs/heads/main').split(/\s+/)[0];
-  if(remote!==head)throw Error('Push the candidate to main, back it up and wait for its CI before publishing the tag');
-  const runs=JSON.parse(execFileSync('gh',['run','list','--workflow','verify.yml','--commit',head,'--limit','1','--json','headSha,status,conclusion'],{cwd:root,encoding:'utf8'}));
-  if(!runs.some(run=>run.headSha===head&&run.status==='completed'&&run.conclusion==='success'))throw Error('Latest remote Verify run for this exact candidate must pass before tag publication');
+  if(remote!==head)throw stageError('remote-main-mismatch','Push the candidate to main, back it up and wait for its CI before publishing the tag');
+  let runs;
+  try{runs=JSON.parse(runGh(['run','list','--workflow','verify.yml','--commit',head,'--limit','1','--json','headSha,status,conclusion']))}
+  catch(error){throw stageError('ci-query','Cannot query the remote Verify run for this candidate',error)}
+  if(!runs.some(run=>run.headSha===head&&run.status==='completed'&&run.conclusion==='success'))throw stageError('remote-ci-not-passed','Latest remote Verify run for this exact candidate must pass before tag publication');
  }
- for(const script of ['scripts/audit-public.mjs','scripts/verify-links.mjs','scripts/verify-manifest.mjs','scripts/verify-sdk.mjs'])execFileSync(process.execPath,[script],{cwd:root,stdio:'inherit'});
- execFileSync(process.execPath,['--test',...releaseTestFiles(root)],{cwd:root,stdio:'inherit'});
- const before=backup(root,backupDestination,{apply:true});
- git('tag','-a',plan.tag,'-m',`Frontier Computing Systems ${version}`);
- const after=backup(root,backupDestination,{apply:true});
- if(push)git('push','origin',plan.tag);
+ for(const name of ['audit-public','verify-links','verify-manifest','verify-sdk']){
+  try{execFileSync(process.execPath,[`scripts/${name}.mjs`],{cwd:root,stdio:'inherit'})}
+  catch(error){throw stageError(name,`${name} rejected the release candidate`,error)}
+ }
+ let testFiles;
+ try{testFiles=releaseTestFiles(root)}
+ catch(error){throw stageError('release-test-set',error.message)}
+ try{execFileSync(process.execPath,['--test',...testFiles],{cwd:root,stdio:'inherit'})}
+ catch(error){throw stageError('release-tests','Release test set failed',error)}
+ let before;
+ try{before=backup(root,backupDestination,{apply:true})}
+ catch(error){throw stageError('backup','Source backup before tagging failed',error)}
+ try{git('tag','-a',plan.tag,'-m',`Frontier Computing Systems ${version}`)}
+ catch(error){throw stageError('tag-create','Release tag creation failed',error)}
+ let after;
+ try{after=backup(root,backupDestination,{apply:true})}
+ catch(error){throw stageError('backup','Source backup after tagging failed',error)}
+ if(push){try{git('push','origin',plan.tag)}catch(error){throw stageError('tag-push','Release tag push failed',error)}}
  return {...plan,before:before.folder,after:after.folder,completed:true};
 }
 
@@ -67,5 +91,5 @@ export function releaseArgs(args=[]){const i=args.indexOf('--backup-dir');return
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{console.log(JSON.stringify(release(defaultRoot,releaseArgs(process.argv.slice(2))),null,2));}
- catch(error){console.error(error.message);process.exitCode=1;}
+ catch(error){const stage=typeof error?.releaseStage==='string'?error.releaseStage:'unexpected';console.error(JSON.stringify({stage,message:String(error?.message??error)}));process.exitCode=1;}
 }
