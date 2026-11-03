@@ -4,6 +4,7 @@ import { artifactHash, artifactState, checkBindings } from './evaluation.mjs';
 
 const OUTPUT_MODIFIED = 'output-modified-during-verification';
 const OUTPUT_NOT_REGULAR = 'output-not-regular-file';
+const ASSESSMENT_NOT_REGULAR = 'assessment-not-regular-file';
 // The snapshot uses lstat semantics: a symbolic link (even one that resolves to a regular file),
 // a directory and every special file are not artifacts and carry no byte hash.
 const artifactSnapshot = file => artifactState(file);
@@ -56,6 +57,20 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
         outputBeforeSha256: beforeVerification.sha256, outputAfterSha256: afterVerification.sha256,
       };
     }
+    // The assessment is external evidence, so it is read only after verification and only when the
+    // path itself is a regular file. lstat semantics match the artifact rule: a symbolic link (even
+    // one that resolves to a readable passing assessment), a directory or any special file is
+    // refused before its content is read, so a linked file can neither supply nor be rewritten as
+    // the graded assessment. A missing assessment keeps the existing generic invalid path.
+    const afterAssessment = artifactSnapshot(trial.assessmentFile);
+    const assessmentNotRegular = !outputNotRegular && !claimedAssessment && !outputChangedDuringVerification
+      && afterAssessment.exists && !afterAssessment.regularFile;
+    if (assessmentNotRegular) {
+      verification = {
+        ...verification, outcome: 'failed', error: ASSESSMENT_NOT_REGULAR,
+        detail: 'AssessmentFile is not a regular file (symbolic link, directory or special file); its content was not read',
+      };
+    }
     let assessment, validity = 'valid', invalidReason = null;
     if (outputNotRegular) {
       validity = 'invalid';
@@ -66,6 +81,9 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     } else if (outputChangedDuringVerification) {
       validity = 'invalid';
       invalidReason = `Candidate output was modified during external verification (before=${beforeVerification.sha256 ?? 'missing'}, after=${afterVerification.sha256 ?? 'missing'}); verifier result not accepted`;
+    } else if (assessmentNotRegular) {
+      validity = 'invalid';
+      invalidReason = 'AssessmentFile is not a regular file (symbolic link, directory or special file); its content was not read and the verifier result is not accepted';
     } else {
       try {
         assessment = JSON.parse(fs.readFileSync(trial.assessmentFile, 'utf8'));
