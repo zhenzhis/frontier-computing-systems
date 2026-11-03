@@ -367,6 +367,82 @@ test('a symbolic-link assessment written by the adapter still reports assessment
   assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
   assert.equal(result.summary.eligible, false);
 });
+// Negative evidence (actually measured on an isolated copy of base a9551df3daaf with this fixture):
+// the adapter left a dangling symbolic link at assessmentFile pointing to a nonexistent target
+// outside the project. Because the pre-verify existence check used fs.existsSync (which follows the
+// link), the link was treated as absent: the external verifier was started, wrote a passing
+// assessment through the link, and created <fixture-root>/external-assessment-target.json; the run
+// failed closed only afterwards with verification.error=assessment-not-regular-file. Measured
+// fields on that base: exit=1, runs=1, assessment.sha256=null, external target created with
+// {"taskOutcome":"passed","hardConstraintsPassed":true}. Reproduce by reverting only the
+// claimedAssessment predicate in runtime/evaluation-runner.mjs to fs.existsSync.
+test('a dangling symbolic link standing in for the assessment is refused before verify runs', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  const external = path.join(f.root, 'external-assessment-target.json');
+  // The verifier writes this marker first, so its absence proves the verifier never started.
+  const marker = path.join(f.verifier, 'verifier-ran-dangling.marker');
+  trial.command.args = ['-e', "const fs=require('node:fs');const [output,assessment,external]=process.argv.slice(-3);fs.writeFileSync(output,JSON.stringify({total:32}));fs.symlinkSync(external,assessment,'file');", trial.outputFile, trial.assessmentFile, external];
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [marker,assessment]=process.argv.slice(-2);fs.writeFileSync(marker,'ran');fs.writeFileSync(assessment,JSON.stringify({taskOutcome:'passed',hardConstraintsPassed:true}));", marker, trial.assessmentFile];
+  fs.rmSync(external, { force: true });
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1, run.stderr);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1); assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed');
+  assert.equal(row.verification.error, 'assessment-pre-exists');
+  assert.notEqual(row.verification.error, 'assessment-not-regular-file');
+  assert.equal(row.verification.exitCode, null);
+  assert.match(row.verification.detail, /verifier not run/);
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.assessment.sha256, null);
+  assert.equal(fs.existsSync(external), false, 'the verifier must not create the external target through the link');
+  assert.equal(fs.existsSync(marker), false, 'the external verifier must not start');
+  assert.equal(fs.lstatSync(trial.assessmentFile).isSymbolicLink(), true);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  const summary = f.store.evaluationSummary('fixture');
+  assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.throws(f.review, /Incomplete frozen trial manifest/);
+});
+// Negative evidence (actually measured on an isolated copy of base a9551df3daaf with this fixture):
+// after registration a dangling symbolic link at outputFile pointed to a nonexistent target outside
+// the project. Because the per-trial freshness check used fs.existsSync, the link was treated as a
+// fresh output: the command was started and wrote {"total":32} through the link, creating
+// <fixture-root>/external-output-target.json and consuming a reservation; the run then failed closed
+// only with verification.error=output-not-regular-file. Measured fields on that base: exit=1,
+// runs=1, attempts=1, experiment.status=candidate. Reproduce by reverting only the per-trial
+// freshness predicate in runtime/evaluation-runner.mjs to fs.existsSync.
+test('a dangling symbolic link at the output path is refused before the command runs', async t => {
+  const f = await evaluationFixture();
+  const unavailable = symlinkUnavailable(f.project);
+  if (unavailable) { t.skip(`symbolic link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  f.register();
+  const trial = f.registration.evaluation.trials[0];
+  const external = path.join(f.root, 'external-output-target.json');
+  fs.rmSync(external, { force: true });
+  fs.symlinkSync(external, trial.outputFile, 'file');
+  const run = f.run();
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /Trial outputs must be fresh; inspect before execution/);
+  assert.equal(run.stdout.trim(), '', 'no trial row may be produced for the refused trial');
+  const experiment = f.store.read().experiments.fixture;
+  assert.equal(experiment.attempts.length, 0); assert.equal(experiment.runs.length, 0);
+  assert.equal(experiment.status, 'candidate');
+  assert.equal(fs.existsSync(external), false, 'the command must not create the external target through the link');
+  assert.equal(fs.lstatSync(trial.outputFile).isSymbolicLink(), true);
+  // Positive control in the same fixture: removing the pre-existing entry lets the unchanged plan
+  // run to completion, so the new predicate refuses only the pre-existing-entry shape.
+  fs.unlinkSync(trial.outputFile);
+  const clean = f.run(); assert.equal(clean.status, 0, clean.stderr);
+  const result = JSON.parse(clean.stdout);
+  assert.equal(result.runs.length, 2); assert.equal(result.summary.eligible, true);
+  assert.equal(fs.existsSync(external), false);
+  assert.equal(f.review().status, 'reviewed-for-adoption');
+});
 // Positive control next to the refusal above: the same fixture, with an artifact the command
 // actually writes, still grades and reviews. 180-odd existing offline cases keep this contract.
 test('an adapter-written regular file stays a valid, reviewable artifact under lstat semantics', async () => {
