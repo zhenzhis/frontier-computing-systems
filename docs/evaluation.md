@@ -28,9 +28,9 @@ npm run demo:evaluation
 
 command 和 verify 均为 `{executable,args,cwd,timeoutMs}`，不经 shell 拼接。执行文件与声明输入会被哈希；每条命令超时最多 600000ms，整体试验额度最多 100 次。budget 中的费用与 Token 只是冻结的实验条件，本离线评估器不调用模型，也不替第三方计费端实施硬额度；实际模型适配器必须另行实施预算。确认阶段不能继续改计划。
 
-command 是受信任的任务执行适配器，产生 outputFile；verify 是预先审查的外部验收器，只读检查实际产物并产生 assessmentFile；它在验证期间改写或替换 outputFile 会使该 trial 失效。所有输出必须尚不存在、彼此唯一且不覆盖冻结输入；父目录先创建。assessmentFile 必须位于候选项目之外。默认不设置 OS 沙箱，不可用此入口执行任意不可信生成代码。正式模型任务须使用真正的隔离环境与网络策略；“外部路径”只是结构边界。
+command 是受信任的任务执行适配器，产生 outputFile；verify 是预先审查的外部验收器，只读检查实际产物并产生 assessmentFile；它在验证期间改写或替换 outputFile 会使该 trial 失效。产物快照与结果回执只接受普通文件，按 lstat 语义判定：符号链接（即使指向可读的普通文件）、目录与其它特殊文件都不算产物，也没有字节哈希，见下文的运行顺序。所有输出必须尚不存在、彼此唯一且不覆盖冻结输入；父目录先创建。assessmentFile 必须位于候选项目之外。默认不设置 OS 沙箱，不可用此入口执行任意不可信生成代码。正式模型任务须使用真正的隔离环境与网络策略；“外部路径”只是结构边界。
 
-执行顺序固定为 command → 产物快照 → assessment 存在性检查 → verify → 产物一致性检查：command 结束后先记录 outputFile 是否为普通文件及其字节哈希，再检查 assessmentFile 是否已存在。若任务适配器已自行写出 assessment，运行器不启动 verify（以免覆盖该文件），该 trial 记为 `validity=invalid`、`verification.outcome=failed`，invalidReason 指明 assessment 在外部校验前已存在；该文件按哈希写入回执并原地保留供检查，不会被审核当作有效评分。未预写 assessment 时启动 verify，结束后重新记录 outputFile 的普通文件状态与哈希；若与快照不同，说明产物在外部验收期间被改写或替换，该 trial 记为 `validity=invalid`、`verification.outcome=failed`，`verification.error` 为稳定标识 `output-modified-during-verification`，invalidReason 与 verification 字段同时保留 verify 前后的产物哈希；产物原地保留并按真实（verify 后）字节哈希写入回执 `output.sha256`，后续 trial 不再执行，实验保持 ineligible，不能被审核当作有效评分。产物一致性检查只比较 verify 启动前后的文件字节与是否为普通文件，不检测“写入后再还原”、运行期重定向、子进程绕过 node 的其它写入方式或验收器语义正确性，仍不是 OS 沙箱，也不能证明评分器语义正确。
+执行顺序固定为 command → 产物快照 → assessment 存在性检查 → verify → 产物一致性检查：command 结束后先记录 outputFile 是否为普通文件及其字节哈希，再检查 assessmentFile 是否已存在。若 command 结束后 outputFile 已存在但不是普通文件（符号链接、目录或其它特殊文件），运行器在启动外部验收器之前就拒绝该 trial：`verification.outcome=failed`，`verification.error` 为稳定标识 `output-not-regular-file`，detail 说明 outputFile 不是普通文件且外部验收器未运行；该 trial 记为 `validity=invalid`、`taskOutcome=not-evaluated`、`hardConstraintsPassed=null`、`output.sha256=null`、`assessment.sha256=null`，链接原地保留供检查，后续 trial 不再执行，实验保持 ineligible。这条拒绝先于 assessment 存在性检查与 verify 执行，因此“把 outputFile 做成指向项目外答案文件的链接、让验收器顺着链接读到答案”的形态不会被执行，验收器也不会顺着该链接写坏项目外文件。若任务适配器已自行写出 assessment，运行器不启动 verify（以免覆盖该文件），该 trial 记为 `validity=invalid`、`verification.outcome=failed`，invalidReason 指明 assessment 在外部校验前已存在；该文件按哈希写入回执并原地保留供检查，不会被审核当作有效评分。未预写 assessment 时启动 verify，结束后重新记录 outputFile 的普通文件状态与哈希；若与快照不同，说明产物在外部验收期间被改写或替换，该 trial 记为 `validity=invalid`、`verification.outcome=failed`，`verification.error` 为稳定标识 `output-modified-during-verification`，invalidReason 与 verification 字段同时保留 verify 前后的产物哈希；产物原地保留并按真实（verify 后）字节哈希写入回执 `output.sha256`，后续 trial 不再执行，实验保持 ineligible，不能被审核当作有效评分。产物一致性检查只比较 verify 启动前后的文件字节与是否为普通文件，不检测“写入后再还原”、hardlink/reflink 与字节相同的复制、注册后才发生的链接变化、运行期重定向、子进程绕过 node 的其它写入方式或验收器语义正确性，仍不是 OS 沙箱，也不能证明评分器语义正确。普通文件判定只回答“该路径本身当前是否为普通文件”：hardlink、reflink 与同内容复制在字节和路径类型上都与原文件一致，无法据此识别；这条检查只排除链接与特殊文件这类非产物形态，不构成独立验收已经完成的证明。
 
 report 集在冻结时强制验收入口位于候选工作项目之外：`verify.cwd` 必须给出且解析后不在候选项目内（省略即默认候选项目，因此被拒绝），`verify.executable` 解析后不得位于候选项目内；`verify.args` 中以 `verify.cwd` 为解析基准落入候选项目内的路径（不论注册时是否已存在；存在的路径还会对 realpath 结果重复判定），只允许该 trial 自己的 outputFile，其余项目内路径被拒绝。参数按四种形态检查，基准与例外相同：
 
@@ -61,13 +61,13 @@ CLI 默认使用用户状态；上述最后一行仅适用于在默认状态注�
 {"taskOutcome":"passed","hardConstraintsPassed":true,"validity":"valid","metrics":{"cost":0.12,"costUnit":"USD","tokens":5000,"interventions":0}}
 ```
 
-taskOutcome 为 passed/failed；hardConstraintsPassed 是独立硬约束结果；validity 可省略（默认 valid）或明确 invalid；metrics 可省略，省略代表未知，不代表零费用。不得为便于通过填写虚构费用。进程退出 0 但无真实产物/有效验收会标记 invalid；验收进程正常退出但任务结果失败则保留为 valid/failed。模型或工具失败应由适配器保存真实错误产物，再由验收器按预定规则归类，不能任意剔除。由任务适配器提前写出的 assessment 不属于“有效验收”，会被判为 invalid 并停止后续 trial，需人工检查后另行授权新的实验计划。验收器在验证期间改写或替换 outputFile 同样不属于有效验收：该 trial 记为 invalid 并停止后续 trial，产物原地保留供人工检查。
+taskOutcome 为 passed/failed；hardConstraintsPassed 是独立硬约束结果；validity 可省略（默认 valid）或明确 invalid；metrics 可省略，省略代表未知，不代表零费用。不得为便于通过填写虚构费用。进程退出 0 但无真实产物/有效验收会标记 invalid；outputFile 不是普通文件（符号链接、目录或特殊文件）同样按无效处理，并且该次不运行外部验收器。验收进程正常退出但任务结果失败则保留为 valid/failed。模型或工具失败应由适配器保存真实错误产物，再由验收器按预定规则归类，不能任意剔除。由任务适配器提前写出的 assessment 不属于“有效验收”，会被判为 invalid 并停止后续 trial，需人工检查后另行授权新的实验计划。验收器在验证期间改写或替换 outputFile 同样不属于有效验收：该 trial 记为 invalid 并停止后续 trial，产物原地保留供人工检查。
 
 每次运行先持久化 reservation，随后执行和保存带身份的回执。重复 id、未结算 reservation、未知试验或错误请求摘要会阻止重放；崩溃后不盲目重试。记录 invalid 或未完成的试验不能被审核时静默忽略。当前不自动分配重试；需要重试的模型研究须先将相应槽位和归类规则纳入计划，额外预算变更需另行审查。
 
 ## 汇总与审核
 
-汇总及采纳审核重新核对冻结输入、结果回执、任务产物与验收文件。所有计划项必须完成；未验证的人工字段不获得新版证据地位。旧格式历史仍可查看和拒绝，旧的 reviewed-for-adoption 历史状态不改写，但不能获得新版的 eligible 结论。
+汇总及采纳审核重新核对冻结输入、结果回执、任务产物与验收文件。回执里的 output/assessment 也按 lstat 语义复核：记录后若 outputFile 被换成符号链接（即使目标字节相同），`artifactHash` 返回 null，与回执 `sha256` 不一致，汇总与审核以稳定错误（`Trial output or assessment changed`）失败关闭，不会继续 eligible；把原普通文件按原字节恢复后仍可用原回执复核。注册后才发生的链接变化、hardlink/reflink/同内容复制、验收器语义正确性与评审者独立性仍未覆盖，这条复核同样不构成独立验收已经完成的证明。所有计划项必须完成；未验证的人工字段不获得新版证据地位。旧格式历史仍可查看和拒绝，旧的 reviewed-for-adoption 历史状态不改写，但不能获得新版的 eligible 结论。
 
 - regression：报告集任务全部通过，全部计划试验有效，硬约束不失败；用来保护已经支持的行为。
 - paired：报告每臂成功/失败/无效原始计数、全部重复均通过的任务数、平均执行时间与配对成功率差。先按用例重复求平均，再在任务族内聚合，最后等权比较任务族。重复和改写题目不增加独立样本数。

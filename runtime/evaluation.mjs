@@ -8,7 +8,17 @@ const canonical = value => JSON.stringify(value, (_key, item) => item && typeof 
   ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 const requireValue = (condition, message) => { if (!condition) throw Error(message); };
 export const evaluationHash = value => digest(canonical(value));
-export const artifactHash = file => fs.existsSync(file) && fs.statSync(file).isFile() ? digest(fs.readFileSync(file)) : null;
+// Artifact identity uses lstat semantics: only a regular file has bytes. A symbolic link — even
+// one that resolves to a readable regular file — as well as a directory or any special file is
+// not an artifact, so it has no hash and cannot be graded or accepted as output. Hard links,
+// reflinks and copies with identical bytes stay indistinguishable from an original file here.
+export function artifactState(file) {
+  let info = null;
+  try { info = fs.lstatSync(file); } catch { info = null; }
+  const regularFile = info?.isFile() === true;
+  return { exists: info !== null, regularFile, sha256: regularFile ? digest(fs.readFileSync(file)) : null };
+}
+export const artifactHash = file => artifactState(file).sha256;
 const inside = (root, file) => { const relative = path.relative(root, file); return !relative || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative)); };
 const identifier = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value);
 const finite = value => Number.isFinite(value) && value >= 0;
