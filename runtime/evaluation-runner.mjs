@@ -1,13 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { artifactHash, artifactState, checkBindings } from './evaluation.mjs';
+import { artifactHash, artifactObservation, checkBindings } from './evaluation.mjs';
 
 const OUTPUT_MODIFIED = 'output-modified-during-verification';
 const OUTPUT_NOT_REGULAR = 'output-not-regular-file';
+const OUTPUT_HARDLINK = 'output-hardlink';
 const ASSESSMENT_NOT_REGULAR = 'assessment-not-regular-file';
+const ASSESSMENT_HARDLINK = 'assessment-hardlink';
 // The snapshot uses lstat semantics: a symbolic link (even one that resolves to a regular file),
-// a directory and every special file are not artifacts and carry no byte hash.
-const artifactSnapshot = file => artifactState(file);
+// a directory and every special file are not artifacts and carry no byte hash. The same
+// observation reports the hard-link count, so a regular file that is only a second name for bytes
+// someone else wrote can be refused at run time without touching artifactHash or the receipts that
+// are re-verified from it.
+const artifactSnapshot = file => artifactObservation(file);
 
 export function runEvaluation(store, request, planFile, runCheck, safeData) {
   const allowed = ['schemaVersion', 'experimentId', 'evaluationDigest'];
@@ -35,20 +40,31 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     // link can touch a target outside the project. A wholly missing output keeps the existing
     // path: the verifier runs and the trial is invalid for want of an artifact.
     const outputNotRegular = beforeVerification.exists && !beforeVerification.regularFile;
+    // A regular file with more than one name is a hard link: the bytes may live outside the
+    // project (for example a frozen oracle) and the adapter may have written nothing at all, so it
+    // is refused with its own stable identifier before the external verifier starts. The check is
+    // conservative and closes only this shape; reflinks and byte-identical copies stay
+    // indistinguishable here.
+    const outputHardLinked = beforeVerification.regularFile && Number.isInteger(beforeVerification.linkCount) && beforeVerification.linkCount > 1;
+    const outputRefused = outputNotRegular || outputHardLinked;
     // Only the pre-reviewed external verifier may create the assessment. If the
     // task adapter already produced one, that claim is unverified evidence: the
     // verifier is not run (so it cannot overwrite the file) and the trial is
     // invalid instead of being accepted as a graded result.
-    const claimedAssessment = !outputNotRegular && fs.existsSync(trial.assessmentFile);
+    const claimedAssessment = !outputRefused && fs.existsSync(trial.assessmentFile);
     let verification;
     if (outputNotRegular) verification = {
       outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: OUTPUT_NOT_REGULAR,
       detail: 'Candidate outputFile is not a regular file (symbolic link, directory or special file); external verifier not run',
     };
+    else if (outputHardLinked) verification = {
+      outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: OUTPUT_HARDLINK,
+      detail: `Candidate outputFile is a hard link (link count ${beforeVerification.linkCount}); only a single-link regular file written by the adapter is an artifact; external verifier not run`,
+    };
     else if (claimedAssessment) verification = { outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: 'assessment-pre-exists', detail: 'External verifier not run: assessment existed before verification' };
     else verification = runCheck(trial.verify);
     const afterVerification = artifactSnapshot(trial.outputFile);
-    const outputChangedDuringVerification = !outputNotRegular && !claimedAssessment
+    const outputChangedDuringVerification = !outputRefused && !claimedAssessment
       && (beforeVerification.sha256 !== afterVerification.sha256 || beforeVerification.regularFile !== afterVerification.regularFile);
     if (outputChangedDuringVerification) {
       verification = {
@@ -63,18 +79,32 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     // refused before its content is read, so a linked file can neither supply nor be rewritten as
     // the graded assessment. A missing assessment keeps the existing generic invalid path.
     const afterAssessment = artifactSnapshot(trial.assessmentFile);
-    const assessmentNotRegular = !outputNotRegular && !claimedAssessment && !outputChangedDuringVerification
-      && afterAssessment.exists && !afterAssessment.regularFile;
+    const assessmentObserved = !outputRefused && !claimedAssessment && !outputChangedDuringVerification;
+    const assessmentNotRegular = assessmentObserved && afterAssessment.exists && !afterAssessment.regularFile;
+    // A regular assessment file with more than one name is a hard link: verify has finished, but
+    // its bytes may belong to a passing assessment written outside this trial, so they are kept and
+    // not parsed as this trial's assessment.
+    const assessmentHardLinked = assessmentObserved && !assessmentNotRegular && afterAssessment.regularFile
+      && Number.isInteger(afterAssessment.linkCount) && afterAssessment.linkCount > 1;
     if (assessmentNotRegular) {
       verification = {
         ...verification, outcome: 'failed', error: ASSESSMENT_NOT_REGULAR,
         detail: 'AssessmentFile is not a regular file (symbolic link, directory or special file); its content was not read',
       };
     }
+    if (assessmentHardLinked) {
+      verification = {
+        ...verification, outcome: 'failed', error: ASSESSMENT_HARDLINK,
+        detail: `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not parsed as an assessment`,
+      };
+    }
     let assessment, validity = 'valid', invalidReason = null;
     if (outputNotRegular) {
       validity = 'invalid';
       invalidReason = 'Candidate outputFile is not a regular file (symbolic link, directory or special file); it is not an artifact and the external verifier was not run';
+    } else if (outputHardLinked) {
+      validity = 'invalid';
+      invalidReason = `Candidate outputFile is a hard link (link count ${beforeVerification.linkCount}); it is not a single-link artifact and the external verifier was not run`;
     } else if (claimedAssessment) {
       validity = 'invalid';
       invalidReason = 'Assessment existed before external verification; verify not run';
@@ -84,6 +114,9 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     } else if (assessmentNotRegular) {
       validity = 'invalid';
       invalidReason = 'AssessmentFile is not a regular file (symbolic link, directory or special file); its content was not read and the verifier result is not accepted';
+    } else if (assessmentHardLinked) {
+      validity = 'invalid';
+      invalidReason = `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not parsed as an assessment and the verifier result is not accepted`;
     } else {
       try {
         assessment = JSON.parse(fs.readFileSync(trial.assessmentFile, 'utf8'));
