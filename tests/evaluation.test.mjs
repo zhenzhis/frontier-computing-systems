@@ -730,3 +730,96 @@ test('frozen input bindings stay content-only while recorded trial paths must st
   const summary = f.store.evaluationSummary('fixture'); assert.equal(summary.eligible, true); assert.equal(summary.decision, 'eligible-for-review');
   assert.equal(f.review().status, 'reviewed-for-adoption');
 });
+// Negative evidence (derived from the pre-fix code, not re-executed here: this worker has no shell,
+// so the baseline run was not performed and is not claimed as measured). Before the runner observed
+// the link count again after verification, this shape satisfied the byte comparison (same sha256,
+// still a regular file) and was assembled with verification.outcome=passed, validity=valid and
+// output.sha256=<real hash> although outputFile already had nlink=2. The receipt re-check in
+// runtime/control.mjs → readEvaluationReceipt then refused those two paths with the generic
+// 'Trial output or assessment changed': run exit=1, stdout empty, experiment.runs=0, attempts=1, and
+// the only trace was an unsettled reservation — no stable identifier, no row, no artifact, and no way
+// to tell this runtime shape apart from a swap made after the row was recorded. Reproduce by deleting
+// only the outputHardLinkedDuringVerification observation in runtime/evaluation-runner.mjs and
+// running `node --test tests/evaluation.test.mjs` (a run with a shell must confirm the derived
+// fields before they are written as measured). The hard link and its bytes stay in place after the
+// run, so the assertions below show the shape without any revert.
+test('an artifact that becomes a hard link during external verification is refused and recorded', async t => {
+  const f = await evaluationFixture();
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  // The verifier first writes the passing assessment the trial would otherwise have recorded, then
+  // replaces outputFile with a hard link to a copy of its own bytes: the byte hash is unchanged and
+  // the path is still a regular file, but it now has a second name outside the project.
+  const copy = path.join(f.verifier, 'output-bytes-copy.json');
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [output,assessment,copy]=process.argv.slice(-3);fs.writeFileSync(assessment,JSON.stringify({taskOutcome:'passed',hardConstraintsPassed:true,validity:'valid'}));fs.copyFileSync(output,copy);fs.unlinkSync(output);fs.linkSync(copy,output);", trial.outputFile, trial.assessmentFile, copy];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1);
+  // The result document is pretty-printed, so "one line" means exactly one trial row: the run must
+  // print its recorded evidence instead of failing closed with an empty stdout.
+  assert.ok(run.stdout.trim().length > 0, 'the recorded row must be printed, not replaced by a generic error');
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1, 'stdout carries exactly one trial result');
+  const output = fs.lstatSync(trial.outputFile), assessment = fs.lstatSync(trial.assessmentFile);
+  assert.equal(output.isFile(), true); assert.equal(output.isSymbolicLink(), false); assert.equal(output.nlink, 2);
+  assert.equal(artifactHash(trial.outputFile), artifactHash(copy), 'the bytes are the pre-verification bytes');
+  assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.error, 'output-hardlink');
+  assert.match(row.verification.detail, /hard link/);
+  assert(row.verification.detail.includes(`link count ${output.nlink}`), 'detail must name the actual link count');
+  assert.equal(output.nlink, 2);
+  assert.match(row.verification.detail, /already ran/);
+  assert.doesNotMatch(row.verification.detail, /verifier not run/, 'the external verifier did run for this shape');
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated');
+  assert.equal(row.hardConstraintsPassed, null); assert.equal(row.metrics, null);
+  assert.equal(row.output.sha256, null);
+  assert.equal(assessment.nlink, 1);
+  assert.equal(row.assessment.sha256, artifactHash(trial.assessmentFile), 'a single-link regular assessment keeps its real hash');
+  assert.match(row.invalidReason, /hard link/);
+  assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  assert.doesNotMatch(run.stderr, /Trial output or assessment changed/);
+  assert.doesNotMatch(run.stderr, /Valid trial needs/);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  assert.equal(result.summary.recorded, 1); assert.equal(result.summary.planned, 2);
+  const summary = f.store.evaluationSummary('fixture');
+  assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.equal(summary.recorded, 1); assert.equal(summary.planned, 2);
+  assert.throws(f.review, /Invalid trials require investigation|Incomplete frozen trial manifest/);
+  assert.equal(fs.lstatSync(trial.outputFile).nlink, 2, 'the hard link stays in place for inspection');
+  assert.equal(artifactHash(trial.outputFile), artifactHash(copy));
+  assert.equal(fs.readFileSync(trial.outputFile, 'utf8'), fs.readFileSync(copy, 'utf8'));
+});
+// The combination shape: verify replaces both trial paths with multi-link regular files. The row must
+// still be written — an earlier receipt re-check threw the generic error here and discarded it — with
+// both recorded hashes null, and the summary must stay ineligible instead of throwing.
+test('a verifier that replaces both trial paths with hard links still records one reviewable row', async t => {
+  const f = await evaluationFixture();
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const trials = f.registration.evaluation.trials, trial = trials[0];
+  const external = path.join(f.verifier, 'external-assessment.json'), forged = JSON.stringify({ taskOutcome: 'passed', hardConstraintsPassed: true });
+  fs.writeFileSync(external, forged);
+  const copy = path.join(f.verifier, 'output-bytes-copy-both.json');
+  trial.verify.args = ['-e', "const fs=require('node:fs');const [output,assessment,copy,external]=process.argv.slice(-4);fs.copyFileSync(output,copy);fs.unlinkSync(output);fs.linkSync(copy,output);fs.linkSync(external,assessment);", trial.outputFile, trial.assessmentFile, copy, external];
+  f.register();
+  const run = f.run(); assert.equal(run.status, 1);
+  const result = JSON.parse(run.stdout), row = result.runs[0];
+  assert.equal(result.runs.length, 1);
+  assert.equal(row.execution.outcome, 'passed');
+  assert.equal(row.verification.outcome, 'failed'); assert.equal(row.verification.error, 'output-hardlink');
+  assert.equal(row.validity, 'invalid'); assert.equal(row.taskOutcome, 'not-evaluated'); assert.equal(row.hardConstraintsPassed, null);
+  assert.equal(row.output.sha256, null); assert.equal(row.assessment.sha256, null);
+  assert.equal(fs.lstatSync(trial.outputFile).nlink, 2); assert.equal(fs.lstatSync(trial.assessmentFile).nlink, 2);
+  assert.equal(fs.readFileSync(trial.assessmentFile, 'utf8'), forged);
+  assert.match(row.invalidReason, /hard link/); assert.doesNotMatch(row.invalidReason, /Missing, inconsistent or invalid verifier assessment/);
+  assert.doesNotMatch(run.stderr, /Trial output or assessment changed/); assert.doesNotMatch(run.stderr, /Valid trial needs/);
+  const experiment = f.store.read().experiments.fixture; assert.equal(experiment.runs.length, 1); assert.equal(experiment.attempts.length, 1);
+  assert.equal(fs.existsSync(trials[1].outputFile), false); assert.equal(fs.existsSync(trials[1].assessmentFile), false);
+  assert.equal(result.summary.eligible, false); assert.equal(result.summary.decision, 'insufficient-evidence');
+  const summary = f.store.evaluationSummary('fixture');
+  assert.equal(summary.eligible, false); assert.equal(summary.decision, 'insufficient-evidence');
+  assert.equal(summary.recorded, 1); assert.equal(summary.planned, 2);
+  assert.throws(f.review, /Invalid trials require investigation|Incomplete frozen trial manifest/);
+});

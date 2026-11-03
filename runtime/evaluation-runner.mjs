@@ -71,7 +71,19 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     else if (claimedAssessment) verification = { outcome: 'failed', exitCode: null, signal: null, wallMs: 0, error: 'assessment-pre-exists', detail: 'External verifier not run: assessment existed before verification' };
     else verification = runCheck(trial.verify);
     const afterVerification = artifactSnapshot(trial.outputFile);
-    const outputChangedDuringVerification = !outputRefused && !claimedAssessment
+    // The link count is observed again here for the same reason it is observed before verification:
+    // a regular file with a second name is not an artifact this trial may record, even when its bytes
+    // are unchanged. A verifier (or anything else) that replaces outputFile with a hard link to a
+    // byte-identical copy during verification therefore hits the same stable identifier that already
+    // refuses that shape before verification, instead of satisfying the byte comparison and then
+    // failing the receipt re-check with a generic error and no row at all. Bytes, not link topology,
+    // still decide the frozen input bindings (see checkBindings).
+    const outputHardLinkedDuringVerification = !outputRefused && !claimedAssessment
+      && afterVerification.regularFile && Number.isInteger(afterVerification.linkCount) && afterVerification.linkCount > 1;
+    // A byte change on a single-link regular file keeps its own identifier and its real post-verify
+    // hash. When the same path also gained a second name the artifact-identity refusal below wins,
+    // because that path is not a single-link artifact either way and its bytes may belong to a copy.
+    const outputChangedDuringVerification = !outputRefused && !claimedAssessment && !outputHardLinkedDuringVerification
       && (beforeVerification.sha256 !== afterVerification.sha256 || beforeVerification.regularFile !== afterVerification.regularFile);
     if (outputChangedDuringVerification) {
       verification = {
@@ -106,6 +118,16 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
         detail: `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not read as an assessment`,
       };
     }
+    // The artifact-identity refusal is applied after the assessment observations: a graded path that
+    // gained a second name during verification is not an artifact, so the row keeps one stable
+    // identifier (`output-hardlink`, the same one used before verification) even when the assessment
+    // was replaced as well, and the assessment content is still never parsed as this trial's result.
+    if (outputHardLinkedDuringVerification) {
+      verification = {
+        ...verification, outcome: 'failed', error: OUTPUT_HARDLINK,
+        detail: `Candidate outputFile became a hard link during external verification (link count ${afterVerification.linkCount}); only a single-link regular file written by the adapter is an artifact, so the external verifier already ran but its result is not accepted`,
+      };
+    }
     let assessment, validity = 'valid', invalidReason = null;
     if (outputNotRegular) {
       validity = 'invalid';
@@ -116,6 +138,9 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     } else if (claimedAssessment) {
       validity = 'invalid';
       invalidReason = 'Assessment existed before external verification; verify not run';
+    } else if (outputHardLinkedDuringVerification) {
+      validity = 'invalid';
+      invalidReason = `Candidate outputFile became a hard link during external verification (link count ${afterVerification.linkCount}); it is not a single-link artifact and the external verifier result is not accepted`;
     } else if (outputChangedDuringVerification) {
       validity = 'invalid';
       invalidReason = `Candidate output was modified during external verification (before=${beforeVerification.sha256 ?? 'missing'}, after=${afterVerification.sha256 ?? 'missing'}); verifier result not accepted`;
@@ -145,9 +170,10 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
       hardConstraintsPassed: validity === 'valid' ? assessment.hardConstraintsPassed : null,
       metrics: validity === 'valid' ? assessment.metrics ?? null : null,
       // A refused outputFile or assessmentFile is not an artifact or an assessment, so it carries no
-      // recorded byte hash even though a regular file with a second name still has readable bytes.
-      // The path and the file itself stay in place for inspection.
-      output: { path: trial.outputFile, sha256: outputRefused ? null : artifactHash(trial.outputFile) },
+      // recorded byte hash even though a regular file with a second name still has readable bytes. The
+      // same holds for an artifact that gained a second name during verification. The path and the
+      // file itself stay in place for inspection.
+      output: { path: trial.outputFile, sha256: outputRefused || outputHardLinkedDuringVerification ? null : artifactHash(trial.outputFile) },
       assessment: { path: trial.assessmentFile, sha256: assessmentRefused ? null : artifactHash(trial.assessmentFile) },
     });
     const directory = path.join(store.root, 'evaluations', experiment.id);
