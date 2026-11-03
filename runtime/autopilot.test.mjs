@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {checkedPlan,acquireWriter,Autopilot,verifyCandidate,installMergedDependencies,sourceFingerprint,assertVersionOwnership,ASSESS_ATTEMPTS} from './autopilot.mjs';
+import {ROLE_MESSAGE_LIMIT,ROLE_NO_REPORT,roleFailure,usageSummary} from './superagent-model.mjs';
 import {serveModelGateway} from './model-gateway.mjs';
 const root=()=>fs.mkdtempSync(path.join(os.tmpdir(),'fcs-autopilot-'));
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
@@ -96,4 +97,40 @@ test('version ownership comparison refuses package.json and lockfile drift in a 
  fs.writeFileSync(path.join(worktree,'file.txt'),'unrelated change');assert.doesNotThrow(()=>assertVersionOwnership(worktree));
  const lock=JSON.parse(fs.readFileSync(path.join(worktree,'package-lock.json'),'utf8'));lock.packages[''].version='9.9.9';fs.writeFileSync(path.join(worktree,'package-lock.json'),JSON.stringify(lock,null,2)+'\n');
  assert.throws(()=>assertVersionOwnership(worktree),/Version changes are owned by the controller/);
+});
+
+/**
+ * Stable role-failure evidence. These cases inject a coded role error or hand it to the same
+ * failure recorder the controller uses; no model, network or credential is involved. They assert
+ * that the bounded assessment retry and the exhausted-assessment ending are unchanged.
+ */
+test('a coded role failure keeps bounded assessment retries and records its code and call count',async()=>{
+ const failure=roleFailure(ROLE_NO_REPORT,{role:'router',message:'Model produced no structured role result',calls:4,usage:usageSummary([{totalTokens:9,cost:{total:0.2}}]),prompt:'PRIVATE-PROMPT-TEXT'});
+ const{pilot,counts}=assessmentFixture(async()=>{throw failure});
+ for(let attempt=1;attempt<=ASSESS_ATTEMPTS;attempt++){await driveAssessment(pilot);const effect=assessmentEffect(pilot);assert.equal(effect.attempts,attempt);assert.equal(effect.status,attempt===ASSESS_ATTEMPTS?'done':'pending')}
+ assert.equal(counts.router,ASSESS_ATTEMPTS,'the bounded retry count is unchanged');
+ const failures=pilot.store.list('failure'),terminal=failures.find(item=>item.reason==='assessment-attempts-exhausted'),retried=failures.filter(item=>item.reason==='assessment-failed');
+ assert(terminal,'the exhausted assessment still ends explicitly');assert.equal(terminal.errorCode,ROLE_NO_REPORT);assert.equal(terminal.calls,4);assert.match(terminal.error,/no structured role result/);
+ assert.equal(retried.length,ASSESS_ATTEMPTS-1);
+ for(const item of retried){assert.equal(item.errorCode,ROLE_NO_REPORT);assert.equal(item.calls,4)}
+ assert.equal(JSON.stringify(failures).includes('PRIVATE-PROMPT-TEXT'),false,'failure evidence never copies prompt text');
+ const decisions=pilot.store.list('decision');assert.equal(decisions.length,1);assert.equal(decisions[0].audit.reason,'assessment-attempts-exhausted');
+ assert.equal(pilot.store.repo.tickets.list().length,0);assert.equal(pilot.store.list('result').length,0);
+ pilot.store.close();
+});
+test('launch failure evidence records the stable role code and numeric calls without accepting a result',async()=>{
+ const{pilot}=assessmentFixture(async()=>({kind:'accept',...plan,rules:['improve']}));
+ pilot.store.engine.evaluateDue();const assessed=pilot.store.claim(['assess']);await pilot.assess(assessed);pilot.store.settle(assessed);
+ const launch=pilot.store.claim(['launch']);assert(launch,'the accepted plan queues one launch effect');
+ const failure=roleFailure(ROLE_MESSAGE_LIMIT,{role:'worker',message:'Assistant message limit of 80 reached before fcs_report',calls:80,usage:usageSummary([{totalTokens:40,cost:{total:0.5}}]),prompt:'PRIVATE-PROMPT-TEXT'});
+ await pilot.fail('launch',launch,failure);
+ const recorded=pilot.store.list('failure').find(item=>item.kind==='launch');
+ assert(recorded,'the launch failure stays recorded');
+ assert.equal(recorded.effectId,launch.id);
+ assert.equal(recorded.errorCode,ROLE_MESSAGE_LIMIT);
+ assert.equal(recorded.calls,80);
+ assert.match(recorded.error,/message limit/i);
+ assert.equal(JSON.stringify(recorded).includes('PRIVATE-PROMPT-TEXT'),false,'launch evidence never copies prompt text');
+ assert.equal(pilot.store.list('result').length,0,'a failed launch never produces an accepted result');
+ pilot.store.close();
 });

@@ -2,6 +2,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {projectPath,safeData} from './control.mjs';
 
+/** Stable role-failure codes. They survive into trial rows, failure evidence and status output instead of one opaque message. */
+export const ROLE_MESSAGE_LIMIT='FCS_ROLE_MESSAGE_LIMIT';
+export const ROLE_NO_REPORT='FCS_ROLE_NO_REPORT';
+export const ROLE_ABORTED='FCS_ROLE_ABORTED';
+/** The same fixed assistant-message budget both paired research arms receive. */
+export const ROLE_CALL_BUDGET=80;
+const finite=value=>Number.isFinite(value)?value:0;
+/** Numeric-only usage aggregate. Prompts, message bodies and credentials are never copied into it. */
+export function usageSummary(values=[]) {
+ const summary={messages:0,input:0,output:0,totalTokens:0,cost:0,costReports:0};
+ for(const value of values){if(!value||typeof value!=='object')continue;summary.messages++;summary.input+=finite(value.input);summary.output+=finite(value.output);summary.totalTokens+=finite(value.totalTokens);const cost=value.cost?.total;if(Number.isFinite(cost)){summary.cost+=cost;summary.costReports++}}
+ return summary;
+}
+/** A role failure carrying one stable code plus numeric call/usage evidence. The message stays human readable. */
+export function roleFailure(code,{role=null,message,calls=0,usage=null}={}) {
+ if(typeof code!=='string'||!code)throw Error('A stable role failure code is required');
+ const error=Error(String(message??code));
+ error.code=code;error.role=role;error.calls=Number.isFinite(calls)?calls:0;error.usage=usage;
+ return error;
+}
+
 /** A fixed-role Pi executor. Authentication is resolved by the existing runtime, never copied. */
 export async function runModelRole({project,agentDir,provider,model,role,prompt,files=[],stateDir,signal,onUsage=()=>{},onProgress=()=>{},onSession=()=>{},contextRead}) {
  if(signal?.aborted)throw Error('Execution cancelled before model initialization');
@@ -26,6 +47,15 @@ export async function runModelRole({project,agentDir,provider,model,role,prompt,
  if(extensionsResult.errors.length)throw Error('Isolated executor failed to load');
  onSession(session);
  const abort=()=>void session.abort();signal?.addEventListener('abort',abort,{once:true});
- let calls=0;session.subscribe(event=>{if(event.type==='message_end'&&event.message?.role==='assistant'){calls++;onUsage(event.message.usage??{});onProgress({calls});if(calls>=80)void session.abort()}});
- try{await session.prompt(prompt);if(signal?.aborted)throw Error('Execution cancelled');if(!reported)throw Error('Model produced no structured role result');return reported}finally{signal?.removeEventListener('abort',abort);await session.dispose()}
+ // The three observed failure causes stay distinguishable: message-limit abort, missing report, external abort.
+ let calls=0,limitReached=false;const samples=[];session.subscribe(event=>{if(event.type==='message_end'&&event.message?.role==='assistant'){calls++;samples.push(event.message.usage??{});onUsage(event.message.usage??{});onProgress({calls});if(calls>=ROLE_CALL_BUDGET){limitReached=true;void session.abort()}}});
+ const failure=(code,message)=>roleFailure(code,{role,message,calls,usage:usageSummary(samples)}),limitMessage=`Assistant message limit of ${ROLE_CALL_BUDGET} reached before fcs_report`;
+ try{
+  // A report that did arrive is still a result; the budget only explains why one never arrived.
+  try{await session.prompt(prompt)}catch(error){if(signal?.aborted)throw failure(ROLE_ABORTED,'Execution cancelled');if(limitReached)throw failure(ROLE_MESSAGE_LIMIT,limitMessage);throw error}
+  if(signal?.aborted)throw failure(ROLE_ABORTED,'Execution cancelled');
+  if(reported)return reported;
+  if(limitReached)throw failure(ROLE_MESSAGE_LIMIT,limitMessage);
+  throw failure(ROLE_NO_REPORT,'Model produced no structured role result');
+ }finally{signal?.removeEventListener('abort',abort);await session.dispose()}
 }
