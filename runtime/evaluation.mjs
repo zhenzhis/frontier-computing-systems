@@ -20,9 +20,10 @@ export function artifactState(file) {
 // name may be the only reason those bytes exist where the runner reads them (for example a hard
 // link to an oracle outside the project), so a runtime snapshot with linkCount > 1 is refused as a
 // candidate artifact or as an assessment. This observation stays separate from
-// artifactState/artifactHash: bytes, not link topology, decide frozen input binding and receipt
-// re-verification, so a hard-link-aware backup or deduplication tool cannot cause a false rejection
-// of recorded evidence.
+// artifactState/artifactHash: bytes, not link topology, decide frozen input binding, so a
+// hard-link-aware backup or deduplication tool cannot cause a false rejection of declared inputs.
+// readEvaluationReceipt reads the same link count for its two trial paths only, so a recorded
+// artifact or assessment cannot be swapped for a hard link to a byte-identical copy after the fact.
 export function artifactObservation(file) {
   let info = null;
   try { info = fs.lstatSync(file); } catch { info = null; }
@@ -165,9 +166,18 @@ export function readEvaluationReceipt(experiment, reference, storeRoot) {
   requireValue(trial && reference.trialId === row.trialId && attempt?.attemptId === row.attemptId && row.contractHash === contract.digest && row.conditionHash === contract.armHashes[trial.arm] && row.arm === trial.arm && row.caseId === trial.caseId && row.split === contract.plan.cases.find(item => item.id === trial.caseId).split, 'Receipt identity does not match reserved frozen trial');
   requireValue(row.schemaVersion === 2 && ['valid', 'invalid'].includes(row.validity) && ['passed', 'failed', 'not-evaluated'].includes(row.taskOutcome) && (typeof row.hardConstraintsPassed === 'boolean' || (row.validity === 'invalid' && row.hardConstraintsPassed === null)), 'Structured trial validity and task outcome required');
   requireValue(['passed', 'failed'].includes(row.execution?.outcome) && finite(row.execution.wallMs) && (!row.verification || ['passed', 'failed'].includes(row.verification.outcome)), 'Process and task results must be separate');
+  // The run-time snapshot refuses an outputFile or assessmentFile that is not a single-link regular
+  // file; re-checking the same two paths here means recorded evidence cannot be swapped afterwards
+  // for a hard link to a byte-identical copy, because a second name is refused with the existing
+  // stable error even though the bytes still hash to the recorded value. A row that recorded no
+  // artifact hash (a refused shape) must still not have become a single-link artifact. Frozen input
+  // bindings remain content-only (see checkBindings), so backup or deduplication names on declared
+  // inputs stay legal.
   for (const [key, expectedPath] of [['output', trial.outputFile], ['assessment', trial.assessmentFile]]) {
     requireValue(row[key]?.path === expectedPath, 'Receipt output identity mismatch');
-    requireValue(artifactHash(expectedPath) === row[key].sha256, 'Trial output or assessment changed');
+    const observed = artifactObservation(expectedPath);
+    const singleName = observed.regularFile && observed.linkCount === 1;
+    requireValue(row[key].sha256 === null ? !singleName : singleName && observed.sha256 === row[key].sha256, 'Trial output or assessment changed');
   }
   if (row.validity === 'valid') {
     checkBindings(contract);
