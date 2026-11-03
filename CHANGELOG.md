@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.15 — 2026-11-03
+
+- 按授权计划补齐 evaluation v2 运行器/回执对硬链接冒名的拒绝：outputFile 在启动 verify 之前、assessmentFile 在 verify 之后读取之前按“lstat 普通文件且 nlink=1”判定，命中时以稳定标识 output-hardlink / assessment-hardlink 记录 invalid 行（对应 sha 为 null、文件原地保留、停止后续 trial、实验保持 ineligible）；回执复核对这两条路径同样要求单链接，因此记录后被换成指向同字节副本的硬链接会以既有稳定错误 'Trial output or assessment changed' 失败关闭，恢复为单链接同字节文件后重新可复核；冻结输入绑定语义未变（artifactHash/checkBindings 仍只按字节）。新增/改写 4 组离线回归（产物硬链接到项目外 oracle、产物硬链接到冻结输入、验收件硬链接、记录后掉包）与正对照，并在 docs/evaluation.md 更新执行顺序、稳定标识、sha=null 记录字段与未覆盖清单。我无 shell，未能亲自运行 node --test / npm test / audit / verify-links；验证命令与 CI、版本/CHANGELOG/release-manifest 刷新按计划归控制器。
+
 ## 0.4.14 — 2026-11-03
 
 - 按授权计划实现了运行期硬链接（nlink>1）失败关闭：runtime/evaluation.mjs 新增只读 observation（artifactObservation 带 linkCount，artifactState/artifactHash 仍只看字节）与 runtime/evaluation-runner.mjs 的两个新稳定标识 output-hardlink / assessment-hardlink；tests/evaluation.test.mjs 追加 3 个硬链接用例（产物硬链接、验收件硬链接、nlink 只作用于运行期快照的正对照）；docs/evaluation.md 把 hardlink 从“未覆盖形态”移入已拒绝行为并如实保留剩余限制。未改动 package.json / package-lock.json / CHANGELOG.md / release-manifest.json；未调用模型、网络或凭据，未改变协议 schema。重要限制：本 worker 无 shell，无法执行 node --test 或基线与候选的实际比对，因此验收第 1、2 条的“执行并实测”由控制器完成；新增测试注释已如实写明负证据为“由修复前代码推导、未在 f4541d97 上实测”，未声称已实测。

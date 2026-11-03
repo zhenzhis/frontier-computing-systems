@@ -4,14 +4,15 @@ import { artifactHash, artifactObservation, checkBindings } from './evaluation.m
 
 const OUTPUT_MODIFIED = 'output-modified-during-verification';
 const OUTPUT_NOT_REGULAR = 'output-not-regular-file';
-const OUTPUT_HARDLINK = 'output-hardlink';
+export const OUTPUT_HARDLINK = 'output-hardlink';
 const ASSESSMENT_NOT_REGULAR = 'assessment-not-regular-file';
-const ASSESSMENT_HARDLINK = 'assessment-hardlink';
+export const ASSESSMENT_HARDLINK = 'assessment-hardlink';
 // The snapshot uses lstat semantics: a symbolic link (even one that resolves to a regular file),
 // a directory and every special file are not artifacts and carry no byte hash. The same
 // observation reports the hard-link count, so a regular file that is only a second name for bytes
-// someone else wrote can be refused at run time without touching artifactHash or the receipts that
-// are re-verified from it.
+// someone else wrote (an oracle outside the project, or a frozen input) can be refused at run time
+// without touching artifactHash, the frozen input bindings or the receipts that are re-verified
+// from those hashes.
 const artifactSnapshot = file => artifactObservation(file);
 
 export function runEvaluation(store, request, planFile, runCheck, safeData) {
@@ -41,10 +42,10 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     // path: the verifier runs and the trial is invalid for want of an artifact.
     const outputNotRegular = beforeVerification.exists && !beforeVerification.regularFile;
     // A regular file with more than one name is a hard link: the bytes may live outside the
-    // project (for example a frozen oracle) and the adapter may have written nothing at all, so it
-    // is refused with its own stable identifier before the external verifier starts. The check is
-    // conservative and closes only this shape; reflinks and byte-identical copies stay
-    // indistinguishable here.
+    // project (for example a frozen oracle) or in a frozen input, and the adapter may have written
+    // nothing at all, so it is refused with its own stable identifier before the external verifier
+    // starts. The check is conservative and closes only this shape; reflinks and byte-identical
+    // copies with a single name stay indistinguishable here.
     const outputHardLinked = beforeVerification.regularFile && Number.isInteger(beforeVerification.linkCount) && beforeVerification.linkCount > 1;
     const outputRefused = outputNotRegular || outputHardLinked;
     // Only the pre-reviewed external verifier may create the assessment. If the
@@ -83,9 +84,10 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     const assessmentNotRegular = assessmentObserved && afterAssessment.exists && !afterAssessment.regularFile;
     // A regular assessment file with more than one name is a hard link: verify has finished, but
     // its bytes may belong to a passing assessment written outside this trial, so they are kept and
-    // not parsed as this trial's assessment.
+    // not read as this trial's assessment.
     const assessmentHardLinked = assessmentObserved && !assessmentNotRegular && afterAssessment.regularFile
       && Number.isInteger(afterAssessment.linkCount) && afterAssessment.linkCount > 1;
+    const assessmentRefused = assessmentNotRegular || assessmentHardLinked;
     if (assessmentNotRegular) {
       verification = {
         ...verification, outcome: 'failed', error: ASSESSMENT_NOT_REGULAR,
@@ -95,7 +97,7 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
     if (assessmentHardLinked) {
       verification = {
         ...verification, outcome: 'failed', error: ASSESSMENT_HARDLINK,
-        detail: `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not parsed as an assessment`,
+        detail: `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not read as an assessment`,
       };
     }
     let assessment, validity = 'valid', invalidReason = null;
@@ -116,7 +118,7 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
       invalidReason = 'AssessmentFile is not a regular file (symbolic link, directory or special file); its content was not read and the verifier result is not accepted';
     } else if (assessmentHardLinked) {
       validity = 'invalid';
-      invalidReason = `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not parsed as an assessment and the verifier result is not accepted`;
+      invalidReason = `AssessmentFile is a hard link (link count ${afterAssessment.linkCount}); its content was not read as an assessment and the verifier result is not accepted`;
     } else {
       try {
         assessment = JSON.parse(fs.readFileSync(trial.assessmentFile, 'utf8'));
@@ -136,8 +138,11 @@ export function runEvaluation(store, request, planFile, runCheck, safeData) {
       taskOutcome: validity === 'valid' ? assessment.taskOutcome : 'not-evaluated',
       hardConstraintsPassed: validity === 'valid' ? assessment.hardConstraintsPassed : null,
       metrics: validity === 'valid' ? assessment.metrics ?? null : null,
-      output: { path: trial.outputFile, sha256: artifactHash(trial.outputFile) },
-      assessment: { path: trial.assessmentFile, sha256: artifactHash(trial.assessmentFile) },
+      // A refused outputFile or assessmentFile is not an artifact or an assessment, so it carries no
+      // recorded byte hash even though a regular file with a second name still has readable bytes.
+      // The path and the file itself stay in place for inspection.
+      output: { path: trial.outputFile, sha256: outputRefused ? null : artifactHash(trial.outputFile) },
+      assessment: { path: trial.assessmentFile, sha256: assessmentRefused ? null : artifactHash(trial.assessmentFile) },
     });
     const directory = path.join(store.root, 'evaluations', experiment.id);
     fs.mkdirSync(directory, { recursive: true });
