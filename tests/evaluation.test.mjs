@@ -104,6 +104,89 @@ test('cross-split cases with distinct input bytes still register, execute and re
   assert.deepEqual([...new Set(result.runs.map(row => row.split))].sort(), ['development', 'report']);
   assert.equal(result.summary.eligible, true); assert.equal(f.review().status, 'reviewed-for-adoption');
 });
+// Cross-split duplicate oracle bytes are refused at freeze time, before any transaction. The
+// duplicate is a byte copy at a different path, so no path check can see it; same-split reuse stays
+// allowed and is the positive control below. The check compares oracle bytes only with each other:
+// input↔oracle identity, rewrites after registration and grader semantics stay uncovered.
+// Negative evidence (derived from the pre-fix code, not re-executed here: this worker has no shell,
+// so the baseline run was not performed and is not claimed as measured). Before this check existed,
+// the plan built by shareOracleBytes(f, { split: 'development', oracleDirectory: f.project }) below
+// registered successfully — store.proposeExperiment returned an experiment,
+// store.read().experiments.fixture existed and the project-local copy of the report oracle's bytes
+// was frozen as a development case oracle — so the report answer was readable from the candidate
+// project while the plan still claimed the report set had not appeared during development.
+// Reproduce on a disposable copy of the revision before this change by deleting only the
+// oracleSplits comparison in runtime/evaluation.mjs and running this file: the two refusal tests
+// below then fail, while same-split reuse and the distinct-oracle control still pass.
+function shareOracleBytes(f, { split, oracleDirectory }) {
+  const plan = f.registration.evaluation, case0 = plan.cases[0], case1 = plan.cases[1];
+  const oracle = path.join(oracleDirectory, `case-1-${split}-oracle-copy.json`);
+  fs.copyFileSync(case0.oracleFile, oracle);
+  case1.split = split; case1.oracleFile = oracle;
+  for (const trial of plan.trials.filter(item => item.caseId === case1.id)) trial.verify.args[1] = oracle;
+  return plan;
+}
+test('report and development cases sharing identical oracle bytes are refused before transaction', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); const plan = shareOracleBytes(f, { split: 'development', oracleDirectory: f.project });
+  // The registered oracle really is a byte-identical copy at a different path inside the project.
+  assert.equal(artifactHash(plan.cases[1].oracleFile), artifactHash(plan.cases[0].oracleFile));
+  assert.notEqual(plan.cases[1].oracleFile, plan.cases[0].oracleFile);
+  assert.throws(f.register, { message: 'Case oracle files must not repeat across evaluation splits' });
+  assert.equal(f.store.read().experiments.fixture, undefined);
+  assert.deepEqual(Object.keys(f.store.read().experiments), []);
+  assert(plan.trials.every(trial => !fs.existsSync(trial.outputFile) && !fs.existsSync(trial.assessmentFile)), 'no command or verifier output may exist');
+  // Positive control in the same fixture: once the copy holds different bytes the same plan shape
+  // registers, so the refusal targets content identity only.
+  fs.writeFileSync(plan.cases[1].oracleFile, JSON.stringify({ total: 49 }));
+  const experiment = f.register();
+  assert.equal(experiment.status, 'candidate'); assert.equal(experiment.evaluation.plan.cases[1].split, 'development');
+});
+test('a hard link to another split case oracle is the same content and is refused before transaction', async t => {
+  const f = await evaluationFixture({ nCases: 2 });
+  const unavailable = hardLinkUnavailable(f.root);
+  if (unavailable) { t.skip(`hard link creation unavailable on this platform (${unavailable}); the regression cannot be exercised offline here`); return; }
+  const plan = f.registration.evaluation, link = path.join(f.project, 'case-1-development-oracle-link.json');
+  fs.linkSync(plan.cases[0].oracleFile, link);
+  plan.cases[1].split = 'development'; plan.cases[1].oracleFile = link;
+  for (const trial of plan.trials.filter(item => item.caseId === plan.cases[1].id)) trial.verify.args[1] = link;
+  // A second name for the same inode inside the project: the path differs, the recorded content hash
+  // does not, so only the byte comparison can refuse it.
+  assert.notEqual(link, plan.cases[0].oracleFile);
+  assert.equal(artifactHash(link), artifactHash(plan.cases[0].oracleFile));
+  assert.throws(f.register, { message: 'Case oracle files must not repeat across evaluation splits' });
+  assert.equal(f.store.read().experiments.fixture, undefined);
+  assert(plan.trials.every(trial => !fs.existsSync(trial.outputFile) && !fs.existsSync(trial.assessmentFile)));
+  assert.equal(fs.lstatSync(link).nlink, 2);
+});
+test('cases inside one split may share identical oracle bytes and still review', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); const plan = shareOracleBytes(f, { split: 'report', oracleDirectory: f.verifier });
+  // Both cases stay in the report split, so reuse is allowed; giving the second case the first
+  // case's input bytes keeps the graded answer equal and lets the plan run end to end.
+  fs.copyFileSync(plan.cases[0].inputFiles[0], plan.cases[1].inputFiles[0]);
+  const experiment = f.register();
+  assert.equal(experiment.status, 'candidate');
+  assert.deepEqual(experiment.evaluation.plan.cases.map(item => item.split), ['report', 'report']);
+  const oracles = experiment.evaluation.plan.cases.map(item => item.oracleFile);
+  assert.deepEqual(experiment.evaluation.plan.cases.map(item => item.family), ['family-0', 'family-1']);
+  assert.notEqual(oracles[0], oracles[1]);
+  assert.equal(experiment.evaluation.bindings[oracles[0]], experiment.evaluation.bindings[oracles[1]]);
+  const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout); assert.equal(result.runs.length, plan.trials.length); assert.equal(result.runs.length, 4);
+  assert(result.runs.every(row => row.validity === 'valid' && row.taskOutcome === 'passed'));
+  assert.equal(result.summary.eligible, true); assert.equal(f.review().status, 'reviewed-for-adoption');
+});
+test('cross-split cases with distinct oracle bytes still register, execute and review', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); const plan = f.registration.evaluation;
+  plan.cases[1].split = 'development';
+  assert.notEqual(artifactHash(plan.cases[0].oracleFile), artifactHash(plan.cases[1].oracleFile));
+  f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout);
+  assert.deepEqual([...new Set(result.runs.map(row => row.split))].sort(), ['development', 'report']);
+  assert.equal(result.summary.eligible, true); assert.equal(result.summary.decision, 'eligible-for-review');
+  const frozen = f.store.read().experiments.fixture.evaluation, oracles = frozen.plan.cases.map(item => item.oracleFile);
+  assert.notEqual(frozen.bindings[oracles[0]], frozen.bindings[oracles[1]]);
+  assert.equal(f.review().status, 'reviewed-for-adoption');
+});
 test('duplicate trial ids and duplicate case/arm/repeat cells are refused', async () => {
   const f = await evaluationFixture(); const trials = f.registration.evaluation.trials; trials[1].id = trials[0].id; assert.throws(f.register, /Unique trial/);
   trials[1].id = 'unique'; trials[1].arm = 'baseline'; assert.throws(f.register, /Duplicate case/);

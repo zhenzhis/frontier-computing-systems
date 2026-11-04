@@ -112,7 +112,7 @@ export function freezeEvaluation(project, plan, maxTrials) {
     armHashes[arm] = evaluationHash({ files: Object.fromEntries(condition.files.map(file => [file, bindings[file]])), config: condition.config, shared: plan.condition });
   }
   requireValue(Array.isArray(plan.cases) && plan.cases.length > 0, 'Frozen cases required');
-  const cases = new Map(), families = new Map(), inputSplits = new Map();
+  const cases = new Map(), families = new Map(), inputSplits = new Map(), oracleSplits = new Map();
   for (const item of plan.cases) {
     requireValue(identifier(item.id) && !cases.has(item.id) && identifier(item.family) && ['development', 'selection', 'report'].includes(item.split), 'Unique cases, task families and valid splits required');
     requireValue(!families.has(item.family) || families.get(item.family) === item.split, 'Task family crosses evaluation splits');
@@ -131,6 +131,18 @@ export function freezeEvaluation(project, plan, maxTrials) {
     }
     item.oracleFile = bind(item.oracleFile);
     if (item.split === 'report') requireValue(!inside(project, item.oracleFile), 'Report oracle must be outside worker project');
+    // The same separation applies to the oracle answer bytes. An oracle in a development or
+    // selection case that holds byte-identical content to a report oracle means the report answer
+    // is readable from the candidate side, even though the report oracle itself sits outside the
+    // project and a byte copy at another path (or a hard link) cannot be caught by a path check.
+    // Compare the SHA-256 that bind already recorded, so copies, hard links and different names
+    // stay one identity. This is a registration-time refusal before any transaction; reuse inside
+    // one split remains allowed. Only oracle bytes are compared with each other here: input bytes
+    // against oracle bytes, rewrites after registration and the meaning of either file stay
+    // uncovered, and this is not an OS sandbox or proof of grader semantics.
+    const oracleContent = bindings[item.oracleFile];
+    requireValue(!oracleSplits.has(oracleContent) || oracleSplits.get(oracleContent) === item.split, 'Case oracle files must not repeat across evaluation splits');
+    oracleSplits.set(oracleContent, item.split);
     cases.set(item.id, item);
   }
   requireValue(Array.isArray(plan.verifierFiles) && plan.verifierFiles.length > 0, 'Declared verifier source files required');
