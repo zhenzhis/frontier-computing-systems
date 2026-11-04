@@ -21,12 +21,14 @@ npm run demo:evaluation
 | schemaVersion | 2 |
 | condition | model/provider/modelVersion/reasoning/sampling/context/tools/environment/budget；必须存在，未知项明确写 unknown |
 | arms | 至少 baseline 和 candidate；每臂包含非空 files（实际输入文件绝对路径）与 config；可增加 control 臂 |
-| cases | 每个 id/family/split/inputFiles/oracleFile；同一任务族不能跨开发、选择、报告集 |
+| cases | 每个 id/family/split/inputFiles/oracleFile；同一任务族不能跨开发、选择、报告集；不同 split 的用例不能声明相同输入字节，同一 split 内允许复用 |
 | verifierFiles | 验收器与其依赖源文件绝对路径；最终报告验收代码和 oracle 位于候选工作项目之外 |
 | trials | 每次 id/caseId/arm/repeat/command/verify/outputFile/assessmentFile；每个用例在每个臂上具有相同的预定重复序号 |
 | policy | regression 或 paired，以及 minReportTasks（独立任务族数量）；paired 还要求 minDelta/maxMeanWallRatio；可加 maxMeanCostRatio/costUnit |
 
 command 和 verify 均为 `{executable,args,cwd,timeoutMs}`，不经 shell 拼接。执行文件与声明输入会被哈希；每条命令超时最多 600000ms，整体试验额度最多 100 次。budget 中的费用与 Token 只是冻结的实验条件，本离线评估器不调用模型，也不替第三方计费端实施硬额度；实际模型适配器必须另行实施预算。确认阶段不能继续改计划。
+
+冻结期还会按 `bind` 已记录的内容 SHA-256 检查用例输入文件：同一输入字节出现在 development、selection、report 中任意两个不同 split 时，登记在任何事务之前以稳定标识 `Case input files must not repeat across evaluation splits` 失败；`store.read().experiments.<id>` 不产生，该计划的 outputFile 与 assessmentFile 均不创建，command 与 verify 均不执行。比较基准是输入文件的字节哈希，因此不同路径的同字节副本与硬链接同样视为同一输入；同一 split 内的多个用例复用同一输入仍被允许。该检查只覆盖跨 split 的输入字节同一性：同义改写、不同字节但语义相同的材料、共享 oracle、注册后替换文件、运行期写入，以及验收器语义与评审者独立性仍未覆盖。保守副作用是：把同一份公共上下文文件（例如公共说明）列入两个不同 split 的用例输入会被拒绝，应改用不同内容，或把相应用例合并到同一 split 的一个用例中。这不是 OS 沙箱，不构成独立验收已经完成或科学有效性的证明。
 
 command 是受信任的任务执行适配器，产生 outputFile；verify 是预先审查的外部验收器，只读检查实际产物并产生 assessmentFile；它在验证期间改写或替换 outputFile 会使该 trial 失效。产物快照、验收件与结果回执都只接受普通文件，按 lstat 语义判定：outputFile 与 assessmentFile 的符号链接（即使指向可读的普通文件）、目录与其它特殊文件都不算有效产物或有效验收件，也没有字节哈希；运行期快照与回执复核都要求这两个路径上的普通文件只有一个名字（nlink=1），多链接的普通文件按硬链接冒名拒绝，见下文的运行顺序与汇总复核。所有输出必须尚不存在、彼此唯一且不覆盖冻结输入；父目录先创建。assessmentFile 必须位于候选项目之外。默认不设置 OS 沙箱，不可用此入口执行任意不可信生成代码。正式模型任务须使用真正的隔离环境与网络策略；“外部路径”只是结构边界。
 

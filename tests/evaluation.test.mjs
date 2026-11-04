@@ -66,6 +66,44 @@ test('case family leakage across splits and incomplete arm manifest are refused'
   const f = await evaluationFixture({ nCases: 2 }); f.registration.evaluation.cases[1].family = f.registration.evaluation.cases[0].family; f.registration.evaluation.cases[1].split = 'selection'; assert.throws(f.register, /crosses/);
   f.registration.evaluation.cases[1].family = 'other'; f.registration.evaluation.trials.pop(); assert.throws(f.register, /Incomplete paired/);
 });
+// Cross-split duplicate input bytes are refused at freeze time, before any transaction. On the
+// pre-fix baseline (5a8de1baf0f7208893c8349fdebd94db7bf017a9) the same plan registered and ran;
+// reproduce by restoring that revision of runtime/evaluation.mjs and running this file: the first
+// two refusal tests below then fail, while same-split reuse and distinct-bytes plans still pass.
+function duplicateInputInAnotherSplit(f, split) {
+  const plan = f.registration.evaluation, duplicate = path.join(f.project, `case-1-${split}-copy.json`);
+  fs.copyFileSync(plan.cases[0].inputFiles[0], duplicate);
+  plan.cases[1].split = split; plan.cases[1].inputFiles = [duplicate];
+  for (const trial of plan.trials.filter(item => item.caseId === plan.cases[1].id)) trial.command.args[1] = duplicate;
+  return plan;
+}
+test('report and development cases sharing identical input bytes are refused before transaction', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); const plan = duplicateInputInAnotherSplit(f, 'development');
+  assert.throws(f.register, { message: 'Case input files must not repeat across evaluation splits' });
+  assert.equal(f.store.read().experiments.fixture, undefined);
+  assert(plan.trials.every(trial => !fs.existsSync(trial.outputFile) && !fs.existsSync(trial.assessmentFile)));
+});
+test('development and selection cases sharing identical input bytes are refused before transaction', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); f.registration.evaluation.cases[0].split = 'development';
+  const plan = duplicateInputInAnotherSplit(f, 'selection');
+  assert.throws(f.register, { message: 'Case input files must not repeat across evaluation splits' });
+  assert.equal(f.store.read().experiments.fixture, undefined);
+  assert(plan.trials.every(trial => !fs.existsSync(trial.outputFile) && !fs.existsSync(trial.assessmentFile)));
+});
+test('cases inside one split may share identical input bytes', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); const plan = duplicateInputInAnotherSplit(f, 'report');
+  const experiment = f.register();
+  assert.equal(experiment.status, 'candidate');
+  assert.deepEqual(experiment.evaluation.plan.cases.map(item => item.split), ['report', 'report']);
+  assert.notEqual(experiment.evaluation.plan.cases[0].inputFiles[0], experiment.evaluation.plan.cases[1].inputFiles[0]);
+});
+test('cross-split cases with distinct input bytes still register, execute and review', async () => {
+  const f = await evaluationFixture({ nCases: 2 }); f.registration.evaluation.cases[1].split = 'development';
+  f.register(); const run = f.run(); assert.equal(run.status, 0, run.stderr);
+  const result = JSON.parse(run.stdout);
+  assert.deepEqual([...new Set(result.runs.map(row => row.split))].sort(), ['development', 'report']);
+  assert.equal(result.summary.eligible, true); assert.equal(f.review().status, 'reviewed-for-adoption');
+});
 test('duplicate trial ids and duplicate case/arm/repeat cells are refused', async () => {
   const f = await evaluationFixture(); const trials = f.registration.evaluation.trials; trials[1].id = trials[0].id; assert.throws(f.register, /Unique trial/);
   trials[1].id = 'unique'; trials[1].arm = 'baseline'; assert.throws(f.register, /Duplicate case/);

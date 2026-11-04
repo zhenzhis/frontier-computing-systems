@@ -112,13 +112,23 @@ export function freezeEvaluation(project, plan, maxTrials) {
     armHashes[arm] = evaluationHash({ files: Object.fromEntries(condition.files.map(file => [file, bindings[file]])), config: condition.config, shared: plan.condition });
   }
   requireValue(Array.isArray(plan.cases) && plan.cases.length > 0, 'Frozen cases required');
-  const cases = new Map(), families = new Map();
+  const cases = new Map(), families = new Map(), inputSplits = new Map();
   for (const item of plan.cases) {
     requireValue(identifier(item.id) && !cases.has(item.id) && identifier(item.family) && ['development', 'selection', 'report'].includes(item.split), 'Unique cases, task families and valid splits required');
     requireValue(!families.has(item.family) || families.get(item.family) === item.split, 'Task family crosses evaluation splits');
     families.set(item.family, item.split);
     requireValue(Array.isArray(item.inputFiles) && item.inputFiles.length > 0, 'Case input files required');
     item.inputFiles = item.inputFiles.map(bind);
+    // The frozen input bytes are what a split separation is about: identical bytes in another
+    // split mean the report material was already visible during development or selection.
+    // Compare the SHA-256 already recorded by bind, so copies, hard links and different paths
+    // stay one identity. This is a registration-time refusal before any transaction; reuse
+    // inside one split remains allowed.
+    for (const file of item.inputFiles) {
+      const content = bindings[file];
+      requireValue(!inputSplits.has(content) || inputSplits.get(content) === item.split, 'Case input files must not repeat across evaluation splits');
+      inputSplits.set(content, item.split);
+    }
     item.oracleFile = bind(item.oracleFile);
     if (item.split === 'report') requireValue(!inside(project, item.oracleFile), 'Report oracle must be outside worker project');
     cases.set(item.id, item);
