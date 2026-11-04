@@ -110,6 +110,46 @@ test('report verifier attached flag values outside the project or naming the tri
   trial.verify.args = args; const experiment = f.register();
   assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
 });
+// Negative evidence (discovery-32e268fe12e7-1993055, revision before this check existed; stated
+// statically because this worker has no shell, so no baseline run is claimed as measured): with this
+// same fixture these four shapes registered successfully — an experiment record was created and
+// nothing was thrown — although each one names a file inside the candidate project once a verifier
+// decodes it (URL-style wrapper or an internal decodeURIComponent). Paths below are sanitized to
+// '<fixture-root>'. Reproduce by reverting only runtime/evaluation.mjs on this commit.
+test('percent-encoded report verifier paths inside the project are refused before reservation', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0], original = trial.verify.args;
+  const answers = path.join(f.project, 'answers.json'), expected = path.join(f.project, 'expected.json');
+  fs.writeFileSync(answers, '{"total":32}\n'); fs.writeFileSync(expected, '{"total":32}\n');
+  const slash = answers.split(path.sep).join('/');
+  const relativeAnswers = path.relative(f.verifier, answers).split(path.sep).join('/');
+  const relativeExpected = path.relative(f.verifier, expected).split(path.sep).join('/');
+  const refused = /must stay outside worker project except the trial outputFile/;
+  const forms = {
+    'percent-encoded absolute oracle': ['--oracle=' + encodeURIComponent(answers), ...original.slice(1)],
+    'percent-encoded relative traversal': [encodeURIComponent(relativeAnswers), ...original.slice(1)],
+    'double-encoded attached config': ['--config=' + encodeURIComponent(encodeURIComponent(relativeExpected)), ...original.slice(1)],
+    'encoded path in inline code': ['-e', `const fs=require('node:fs');fs.readFileSync(decodeURIComponent('${encodeURIComponent(slash)}'),'utf8')`],
+  };
+  for (const [label, args] of Object.entries(forms)) {
+    trial.verify.args = args;
+    assert.throws(f.register, refused, label);
+    assert.equal(f.store.read().experiments.fixture, undefined, label);
+    assert.equal(fs.existsSync(trial.outputFile), false, label);
+    assert.equal(fs.existsSync(trial.assessmentFile), false, label);
+  }
+});
+// The decoding rule must not narrow the accepted set: an external file whose own name contains a
+// literal percent escape keeps registering, and so do --strict, a quoted external path, the external
+// oracle and --out=<encodeURIComponent(trial.outputFile)>. The frozen arguments are recorded exactly
+// as passed, because the check only reads and decodes them.
+test('percent-decoded report verifier arguments outside the project stay accepted and unrewritten', async () => {
+  const f = await evaluationFixture(); const trial = f.registration.evaluation.trials[0], original = trial.verify.args;
+  const external = path.join(f.verifier, 'oracle-100%25.json'); fs.writeFileSync(external, '{"total":32}\n');
+  const args = ['--oracle=' + external, '--out=' + encodeURIComponent(trial.outputFile), '--strict', `"${f.grader}"`, ...original];
+  trial.verify.args = args;
+  const experiment = f.register();
+  assert.deepEqual(experiment.evaluation.plan.trials[0].verify.args, args);
+});
 // Negative evidence (base a7681688, before paired quoted content was path-checked): all forms
 // below registered successfully when the fixture root contained a space, because splitting quoted
 // text on whitespace produced fragments that each resolved outside the project. The check must
